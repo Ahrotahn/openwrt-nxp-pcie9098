@@ -1,0 +1,4 @@
+[submodule "firmware"]
+	path = firmware
+	url = https://github.com/NXP/imx-firmware
+	branch = lf-5.15.71_2.2.0
