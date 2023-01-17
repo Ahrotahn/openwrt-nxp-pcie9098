@@ -153,7 +153,7 @@ Change log:
 #define MAX(a, b) ((a) > (b) ? (a) : (b))
 #endif
 
-#define COMPAT_VERSION_CODE KERNEL_VERSION(0, 0, 0)
+#define COMPAT_VERSION_CODE KERNEL_VERSION(5, 15, 58)
 #define CFG80211_VERSION_CODE MAX(LINUX_VERSION_CODE, COMPAT_VERSION_CODE)
 
 #define IMX_ANDROID_13 0
