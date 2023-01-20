@@ -2,17 +2,20 @@
 
 This is a work-in-progress driver built to support the NXP pcie9098 card that comes with the Golbalscale Mochabin.  
 
-## Install
+## Install:
 
 ```
 opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/v22.03.3/kmod-nxp-pcie9098_v22.03.3.ipk
 ```
+```
+reboot
+```
 
 <br>
 
-## ⚠ IMPORTANT ⚠
+## Note:
 
-* The Sep 05 2022 build of uboot does not reset the pcie device on reboot.  You will need to power off the device before the driver will work.  I'm still investigating whether this can be worked around in the driver, but FLRs aren't enough so this might require an update to uboot to resolve.  
+* The Sep 05 2022 build of uboot does not reset the pcie device on reboot.  A poweroff may be required should the card end up in a bad state.  
 
 * The hardware supports 802.11ax but the currently available firmware does not!  This includes the original firmware released with the Mochabin.  
 
@@ -34,7 +37,7 @@ Mode|Band   |Channel     |Width
 ----|-------|------------|------
 N   |2.4 GHz|6 (2437 Mhz)|40 MHz
 
-`Allow legacy 802.11b rates ☑`
+Allow legacy 802.11b rates `☑`
 
 Set `Country Code` under the `Advanced Settings` tab.  
 
@@ -80,8 +83,8 @@ config wifi-iface 'wifinet1'
 
 </details>
 
-## Logging Info
+## Logging Info:
 
 To increase log verbosity edit `/etc/modules.d/nxp-pcie9098` and change `drvdbg=0x6` to `drvdbg=0x7`.  
 
-To get full debug info use `drvdbg=0x20037`.  
+For full debug info use `drvdbg=0x20037`.  
