@@ -556,6 +556,7 @@ static void woal_pcie_remove(struct pci_dev *dev)
  *
  *  @return         error code
  */
+[[maybe_unused]]
 static void woal_pcie_shutdown(struct pci_dev *dev)
 {
 	pcie_service_card *card;
@@ -597,6 +598,7 @@ done:
  *
  *  @return         error code
  */
+[[maybe_unused]]
 static int woal_pcie_suspend(struct pci_dev *pdev, pm_message_t state)
 {
 	pcie_service_card *cardp;
@@ -714,6 +716,7 @@ done:
  *
  *  @return         error code
  */
+[[maybe_unused]]
 static int woal_pcie_resume(struct pci_dev *pdev)
 {
 	moal_handle *handle;
@@ -974,9 +977,9 @@ static struct pci_driver REFDATA wlan_pcie = {
 	.id_table = wlan_ids,
 	.probe = woal_pcie_probe,
 	.remove = woal_pcie_remove,
-	.shutdown = woal_pcie_shutdown,
 #ifdef CONFIG_PM
 	/* Power Management Hooks */
+	.shutdown = woal_pcie_shutdown,
 	.suspend = woal_pcie_suspend,
 	.resume = woal_pcie_resume,
 #endif
