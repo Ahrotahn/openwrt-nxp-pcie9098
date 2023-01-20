@@ -53,8 +53,10 @@ Change log:
 ********************************************************/
 #define DRV_NAME "NXP mdriver PCIe"
 
+#ifdef CONFIG_PM
 /* PCIE resume handler */
 static int woal_pcie_resume(struct pci_dev *pdev);
+#endif
 static void woal_pcie_reg_dbg(moal_handle *phandle);
 static void woal_pcie_unregister_dev(moal_handle *handle);
 static void woal_pcie_cleanup(pcie_service_card *card);
@@ -656,6 +658,7 @@ static void woal_pcie_remove(struct pci_dev *dev)
 	return;
 }
 
+#ifdef CONFIG_PM
 /**
  *  @brief This function handles PCIE driver remove
  *
@@ -905,6 +908,7 @@ done:
 	LEAVE();
 	return 0;
 }
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
 
@@ -1133,9 +1137,9 @@ static struct pci_driver REFDATA wlan_pcie = {
 	.id_table = wlan_ids,
 	.probe = woal_pcie_probe,
 	.remove = woal_pcie_remove,
-	.shutdown = woal_pcie_shutdown,
 #ifdef CONFIG_PM
 	/* Power Management Hooks */
+	.shutdown = woal_pcie_shutdown,
 	.suspend = woal_pcie_suspend,
 	.resume = woal_pcie_resume,
 #endif
