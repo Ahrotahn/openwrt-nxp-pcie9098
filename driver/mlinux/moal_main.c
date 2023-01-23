@@ -4858,8 +4858,6 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 		if (handle->params.sta_name)
 			snprintf(name, sizeof(name), "%s%%d",
 				 handle->params.sta_name);
-		else if (handle->second_mac)
-			snprintf(name, sizeof(name), "m%s", default_mlan_name);
 		else
 			snprintf(name, sizeof(name), "%s", default_mlan_name);
 		break;
@@ -4869,8 +4867,6 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 		if (handle->params.uap_name)
 			snprintf(name, sizeof(name), "%s%%d",
 				 handle->params.uap_name);
-		else if (handle->second_mac)
-			snprintf(name, sizeof(name), "m%s", default_uap_name);
 		else
 			snprintf(name, sizeof(name), "%s", default_uap_name);
 		break;
@@ -4880,8 +4876,6 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 		if (handle->params.wfd_name)
 			snprintf(name, sizeof(name), "%s%%d",
 				 handle->params.wfd_name);
-		else if (handle->second_mac)
-			snprintf(name, sizeof(name), "m%s", default_wfd_name);
 		else
 			snprintf(name, sizeof(name), "%s", default_wfd_name);
 		break;
