@@ -255,14 +255,14 @@ Change log:
 /**
  * interface name
  */
-#define default_mlan_name "mlan%d"
+#define default_mlan_name "wl%d"
 #define default_uap_name "uap%d"
-#define default_wfd_name "wfd%d"
+#define default_wfd_name "p2p%d"
 #define default_nan_name "nan%d"
 #define default_mpl_name "mpl%d"
 #define default_11p_name "ocb%d"
 #define default_dfs_name "dfs%d"
-#define mwiphy_name "mwiphy%d"
+#define mwiphy_name "%d"
 
 /** country txpower mode */
 #define CNTRY_TXPOWER_MODE 1
