@@ -5,7 +5,7 @@ This is a work-in-progress driver built to support the NXP pcie9098 card that co
 ## Install:
 
 ```
-opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/v22.03.3/kmod-nxp-pcie9098_v22.03.3.ipk
+opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/230122/kmod-nxp-pcie9098_v22.03.3.ipk
 ```
 ```
 reboot
