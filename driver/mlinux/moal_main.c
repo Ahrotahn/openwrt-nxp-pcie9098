@@ -6377,11 +6377,6 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 				     handle->params.sta_name) <= 0)
 				PRINTM(MERROR,
 				       "Failed to write sta bss name\n");
-		} else if (handle->second_mac) {
-			if (snprintf(name, sizeof(name), "m%s",
-				     default_mlan_name) <= 0)
-				PRINTM(MERROR,
-				       "Failed to write mac2 default sta bss name\n");
 		} else {
 			if (snprintf(name, sizeof(name), "%s",
 				     default_mlan_name) <= 0)
@@ -6397,11 +6392,6 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 				     handle->params.uap_name) <= 0)
 				PRINTM(MERROR,
 				       "Failed to write uap bss name\n");
-		} else if (handle->second_mac) {
-			if (snprintf(name, sizeof(name), "m%s",
-				     default_uap_name) <= 0)
-				PRINTM(MERROR,
-				       "Failed to write mac2 default uap bss name\n");
 		} else {
 			if (snprintf(name, sizeof(name), "%s",
 				     default_uap_name) <= 0)
@@ -6417,11 +6407,6 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 				     handle->params.wfd_name) <= 0)
 				PRINTM(MERROR,
 				       "Failed to write wfd bss name\n");
-		} else if (handle->second_mac) {
-			if (snprintf(name, sizeof(name), "m%s",
-				     default_wfd_name) <= 0)
-				PRINTM(MERROR,
-				       "Failed to write mac2 default wfd bss name\n");
 		} else {
 			if (snprintf(name, sizeof(name), "%s",
 				     default_wfd_name) <= 0)
