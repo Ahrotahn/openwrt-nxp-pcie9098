@@ -7908,13 +7908,6 @@ moal_private *woal_bss_index_to_priv(moal_handle *handle, t_u8 bss_index)
 			return handle->priv[i];
 		}
 	}
-	for (i = 0; i < MLAN_MAX_BSS_NUM; i++) {
-		if (handle->priv[i] &&
-		    (handle->priv[i]->bss_index == bss_index + 1)) {
-			LEAVE();
-			return handle->priv[i];
-		}
-	}
 
 	LEAVE();
 	return NULL;
