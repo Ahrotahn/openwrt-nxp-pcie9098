@@ -4673,6 +4673,13 @@ void woal_cfg80211_setup_he_cap(moal_private *priv,
 	int ppe_threshold_len = 0;
 	mlan_ds_11ax_he_capa *phe_cap = NULL;
 	t_u8 hw_hecap_len;
+	struct ieee80211_sband_iftype_data *iftype_data_array;
+	int i, iftypes[] = {
+		NL80211_IFTYPE_STATION,
+		NL80211_IFTYPE_AP,
+		NL80211_IFTYPE_P2P_CLIENT,
+		NL80211_IFTYPE_P2P_GO,
+	}, iftypes_size = sizeof(iftypes)/sizeof(iftypes[0]);
 
 	woal_request_get_fw_info(priv, MOAL_IOCTL_WAIT, &fw_info);
 	if (band->band == NL80211_BAND_5GHZ) {
@@ -4695,9 +4702,6 @@ void woal_cfg80211_setup_he_cap(moal_private *priv,
 		goto done;
 	}
 	memset(iftype_data, 0, sizeof(struct ieee80211_sband_iftype_data));
-	iftype_data->types_mask =
-		MBIT(NL80211_IFTYPE_STATION) | MBIT(NL80211_IFTYPE_AP) |
-		MBIT(NL80211_IFTYPE_P2P_CLIENT) | MBIT(NL80211_IFTYPE_P2P_GO);
 	iftype_data->he_cap.has_he = true;
 	moal_memcpy_ext(priv->phandle,
 			iftype_data->he_cap.he_cap_elem.mac_cap_info,
@@ -4740,8 +4744,20 @@ void woal_cfg80211_setup_he_cap(moal_private *priv,
 		PRINTM(MCMND, "Clear PPE threshold 0x%x\n",
 		       iftype_data->he_cap.he_cap_elem.phy_cap_info[7]);
 	}
-	band->n_iftype_data = 1;
-	band->iftype_data = iftype_data;
+
+	iftype_data_array = kcalloc(iftypes_size,
+			sizeof(struct ieee80211_sband_iftype_data), GFP_KERNEL);
+	if (!iftype_data_array) {
+		PRINTM(MERROR, "Failed to allocate iftype_data_array\n");
+		goto done;
+	}
+	for (i = 0; i < iftypes_size; i++) {
+		memcpy(&iftype_data_array[i], iftype_data,
+				sizeof(iftype_data_array[i]));
+		iftype_data_array[i].types_mask = MBIT(iftypes[i]);
+	}
+	band->n_iftype_data = iftypes_size;
+	band->iftype_data = iftype_data_array;
 done:
 	LEAVE();
 }
@@ -4995,6 +5011,7 @@ void woal_cfg80211_notify_channel(moal_private *priv,
 void woal_cfg80211_notify_antcfg(moal_private *priv, struct wiphy *wiphy,
 				 mlan_ds_radio_cfg *radio)
 {
+	int i;
 	if (IS_STA_OR_UAP_CFG80211(priv->phandle->params.cfg80211_wext) &&
 	    wiphy) {
 		if (wiphy->bands[IEEE80211_BAND_2GHZ]) {
@@ -5007,24 +5024,26 @@ void woal_cfg80211_notify_antcfg(moal_private *priv, struct wiphy *wiphy,
 			     (radio->param.ant_cfg.rx_antenna & 0xFF) != 0)) {
 				bands->ht_cap.mcs.rx_mask[1] = 0;
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
-				if (bands->n_iftype_data &&
-				    bands->iftype_data &&
-				    bands->iftype_data->he_cap.has_he) {
-					t_u16 mcs_nss[2];
+				if (bands->n_iftype_data && bands->iftype_data) {
+					for (i = 0; i < bands->n_iftype_data; i++) {
+						if (bands->iftype_data[i].he_cap.has_he) {
+							t_u16 mcs_nss[2];
 
-					mcs_nss[0] = bands->iftype_data->he_cap
-							     .he_mcs_nss_supp
-							     .rx_mcs_80;
-					mcs_nss[1] = mcs_nss[0] |= 0x0c;
-					moal_memcpy_ext(
-						priv->phandle,
-						(t_void *)&bands->iftype_data
-							->he_cap.he_mcs_nss_supp
-							.rx_mcs_80,
-						(t_void *)&mcs_nss,
-						sizeof(mcs_nss),
-						sizeof(bands->iftype_data->he_cap
-							       .he_mcs_nss_supp));
+							mcs_nss[0] = bands->iftype_data[i].he_cap
+										 .he_mcs_nss_supp
+										 .rx_mcs_80;
+							mcs_nss[1] = mcs_nss[0] |= 0x0c;
+							moal_memcpy_ext(
+								priv->phandle,
+								(t_void *)&bands->iftype_data[i]
+									.he_cap.he_mcs_nss_supp
+									.rx_mcs_80,
+								(t_void *)&mcs_nss,
+								sizeof(mcs_nss),
+								sizeof(bands->iftype_data[i].he_cap
+										   .he_mcs_nss_supp));
+						}
+					}
 				}
 #endif
 			} else if ((radio->param.ant_cfg.tx_antenna & 0xFF) ==
@@ -5033,27 +5052,29 @@ void woal_cfg80211_notify_antcfg(moal_private *priv, struct wiphy *wiphy,
 					   3) {
 				bands->ht_cap.mcs.rx_mask[1] = 0xff;
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
-				if (bands->n_iftype_data &&
-				    bands->iftype_data &&
-				    bands->iftype_data->he_cap.has_he) {
-					t_u16 mcs_nss[2];
+				if (bands->n_iftype_data && bands->iftype_data) {
+					for (i = 0; i < bands->n_iftype_data; i++) {
+						if (bands->iftype_data[i].he_cap.has_he) {
+							t_u16 mcs_nss[2];
 
-					mcs_nss[0] = bands->iftype_data->he_cap
-							     .he_mcs_nss_supp
-							     .rx_mcs_80;
-					mcs_nss[1] = mcs_nss[0] =
-						(mcs_nss[0] & ~0x0c) |
-						((mcs_nss[0] & 0x3) << 2);
+							mcs_nss[0] = bands->iftype_data[i].he_cap
+										 .he_mcs_nss_supp
+										 .rx_mcs_80;
+							mcs_nss[1] = mcs_nss[0] =
+								(mcs_nss[0] & ~0x0c) |
+								((mcs_nss[0] & 0x3) << 2);
 
-					moal_memcpy_ext(
-						priv->phandle,
-						(t_void *)&bands->iftype_data
-							->he_cap.he_mcs_nss_supp
-							.rx_mcs_80,
-						(t_void *)&mcs_nss,
-						sizeof(mcs_nss),
-						sizeof(bands->iftype_data->he_cap
-							       .he_mcs_nss_supp));
+							moal_memcpy_ext(
+								priv->phandle,
+								(t_void *)&bands->iftype_data[i]
+									.he_cap.he_mcs_nss_supp
+									.rx_mcs_80,
+								(t_void *)&mcs_nss,
+								sizeof(mcs_nss),
+								sizeof(bands->iftype_data[i].he_cap
+										   .he_mcs_nss_supp));
+						}
+					}
 				}
 #endif
 			}
@@ -5081,24 +5102,26 @@ void woal_cfg80211_notify_antcfg(moal_private *priv, struct wiphy *wiphy,
 					(__force __le16)0x186;
 #endif
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
-				if (bands->n_iftype_data &&
-				    bands->iftype_data &&
-				    bands->iftype_data->he_cap.has_he) {
-					t_u16 mcs_nss[2];
+				if (bands->n_iftype_data && bands->iftype_data) {
+					for (i = 0; i < bands->n_iftype_data; i++) {
+						if (bands->iftype_data[i].he_cap.has_he) {
+							t_u16 mcs_nss[2];
 
-					mcs_nss[0] = bands->iftype_data->he_cap
-							     .he_mcs_nss_supp
-							     .rx_mcs_80;
-					mcs_nss[1] = mcs_nss[0] |= 0x0c;
-					moal_memcpy_ext(
-						priv->phandle,
-						(t_void *)&bands->iftype_data
-							->he_cap.he_mcs_nss_supp
-							.rx_mcs_80,
-						(t_void *)&mcs_nss,
-						sizeof(mcs_nss),
-						sizeof(bands->iftype_data->he_cap
-							       .he_mcs_nss_supp));
+							mcs_nss[0] = bands->iftype_data[i].he_cap
+										 .he_mcs_nss_supp
+										 .rx_mcs_80;
+							mcs_nss[1] = mcs_nss[0] |= 0x0c;
+							moal_memcpy_ext(
+								priv->phandle,
+								(t_void *)&bands->iftype_data[i]
+									.he_cap.he_mcs_nss_supp
+									.rx_mcs_80,
+								(t_void *)&mcs_nss,
+								sizeof(mcs_nss),
+								sizeof(bands->iftype_data[i].he_cap
+										   .he_mcs_nss_supp));
+						}
+					}
 				}
 #endif
 			} else if ((radio->param.ant_cfg.tx_antenna & 0xFF00) ==
@@ -5117,27 +5140,29 @@ void woal_cfg80211_notify_antcfg(moal_private *priv, struct wiphy *wiphy,
 					(__force __le16)0x30c;
 #endif
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
-				if (bands->n_iftype_data &&
-				    bands->iftype_data &&
-				    bands->iftype_data->he_cap.has_he) {
-					t_u16 mcs_nss[2];
+				if (bands->n_iftype_data && bands->iftype_data) {
+					for (i = 0; i < bands->n_iftype_data; i++) {
+						if (bands->iftype_data[i].he_cap.has_he) {
+							t_u16 mcs_nss[2];
 
-					mcs_nss[0] = bands->iftype_data->he_cap
-							     .he_mcs_nss_supp
-							     .rx_mcs_80;
-					mcs_nss[1] = mcs_nss[0] =
-						(mcs_nss[0] & ~0x0c) |
-						((mcs_nss[0] & 0x3) << 2);
+							mcs_nss[0] = bands->iftype_data[i].he_cap
+										 .he_mcs_nss_supp
+										 .rx_mcs_80;
+							mcs_nss[1] = mcs_nss[0] =
+								(mcs_nss[0] & ~0x0c) |
+								((mcs_nss[0] & 0x3) << 2);
 
-					moal_memcpy_ext(
-						priv->phandle,
-						(t_void *)&bands->iftype_data
-							->he_cap.he_mcs_nss_supp
-							.rx_mcs_80,
-						(t_void *)&mcs_nss,
-						sizeof(mcs_nss),
-						sizeof(bands->iftype_data->he_cap
-							       .he_mcs_nss_supp));
+							moal_memcpy_ext(
+								priv->phandle,
+								(t_void *)&bands->iftype_data[i]
+									.he_cap.he_mcs_nss_supp
+									.rx_mcs_80,
+								(t_void *)&mcs_nss,
+								sizeof(mcs_nss),
+								sizeof(bands->iftype_data[i].he_cap
+										   .he_mcs_nss_supp));
+						}
+					}
 				}
 #endif
 			}
