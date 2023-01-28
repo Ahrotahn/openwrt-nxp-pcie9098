@@ -5,7 +5,7 @@ This is a work-in-progress driver built to support the NXP pcie9098 card that co
 ## Install:
 
 ```
-opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/230122/kmod-nxp-pcie9098_v22.03.3.ipk
+opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/230128/kmod-nxp-pcie9098_v22.03.3.ipk
 ```
 ```
 reboot
@@ -17,11 +17,34 @@ reboot
 
 * The Sep 05 2022 build of uboot does not reset the pcie device on reboot.  A poweroff may be required should the card end up in a bad state.  
 
-* The hardware supports 802.11ax but the currently available firmware does not!  This includes the original firmware released with the Mochabin.  
+* Both radios are capable of running in AC+ mode, but not at the same time.  
 
 <br>
 
 ## Known working configuration:
+
+### radio0:
+
+Mode|Band |Channel      |Width 
+----|-----|-------------|------
+AX  |5 GHz|36 (5180 Mhz)|40 MHz
+
+---
+
+### radio1:
+
+Mode|Band   |Channel     |Width 
+----|-------|------------|------
+N   |2.4 GHz|6 (2437 Mhz)|40 MHz
+
+Allow legacy 802.11b rates `☑`
+
+Set `Country Code` under the `Advanced Settings` tab.  
+
+---
+
+<details>
+<summary>Stock Settings:</summary>
 
 ### radio0:
 
@@ -42,6 +65,8 @@ Allow legacy 802.11b rates `☑`
 Set `Country Code` under the `Advanced Settings` tab.  
 
 ---
+
+</details>
 
 <details>
 <summary>Example <code>/etc/config/wireless</code></summary>
@@ -82,6 +107,8 @@ config wifi-iface 'wifinet1'
 ```
 
 </details>
+
+<br>
 
 ## Logging Info:
 
