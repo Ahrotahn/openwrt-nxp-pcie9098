@@ -1,15 +1,17 @@
 # OpenWrt NXP pcie9098 driver for Mochabin
 
-This is a work-in-progress driver built to support the NXP pcie9098 card that comes with the Golbalscale Mochabin.  
+This is a driver built to support the NXP pcie9098 card that comes with the Golbalscale Mochabin.  
 
 ## Install:
 
 ```
-opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/230128/kmod-nxp-pcie9098_v22.03.3.ipk
+opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/230128/kmod-nxp-pcie9098_v22.03.4.ipk
 ```
 ```
 reboot
 ```
+Change the release and version in the link for the version of OpenWrt you have installed.<br>
+You can see what versions are available on the [Releases page](https://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases).
 
 <br>
 
@@ -18,6 +20,23 @@ reboot
 * The Sep 05 2022 build of uboot does not reset the pcie device on reboot.  A poweroff may be required should the card end up in a bad state.  
 
 * Both radios are capable of running in AC+ mode, but not at the same time.  
+
+* STA/client mode will need `drv_mode=1` added to the section for the radio(s) in the configuration:
+   <details><summary>/lib/firmware/nxp/wifi_mod_para.conf</summary>
+
+   ```
+   PCIE9098_0 = {
+       drv_mode=1
+       cfg80211_wext=0xf
+       max_vir_bss=1
+       cal_data_cfg=none
+       ps_mode=2
+       auto_ds=2
+       host_mlme=1
+       fw_name=nxp/pcieuart9098_combo_v1.bin
+   }
+   ```
+   </details>
 
 <br>
 
