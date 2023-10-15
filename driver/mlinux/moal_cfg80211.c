@@ -1249,7 +1249,7 @@ int woal_cfg80211_change_virtual_intf(struct wiphy *wiphy,
 #endif /* WIFI_DIRECT_SUPPORT */
 #if defined(STA_SUPPORT) && defined(UAP_SUPPORT)
 		if (priv->bss_type == MLAN_BSS_TYPE_UAP) {
-#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 19, 2)) || IMX_ANDROID_13)
+#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134)) || IMX_ANDROID_13)
 			woal_cfg80211_del_beacon(wiphy, dev, 0);
 #else
 			woal_cfg80211_del_beacon(wiphy, dev);
@@ -1483,7 +1483,7 @@ fail:
  */
 #endif
 int woal_cfg80211_add_key(struct wiphy *wiphy, struct net_device *netdev,
-#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 0, 0) || IMX_ANDROID_13)
+#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134) || IMX_ANDROID_13)
 			  int link_id,
 #endif
 			  t_u8 key_index,
@@ -1542,7 +1542,7 @@ int woal_cfg80211_add_key(struct wiphy *wiphy, struct net_device *netdev,
  */
 #endif
 int woal_cfg80211_del_key(struct wiphy *wiphy, struct net_device *netdev,
-#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 0, 0) || IMX_ANDROID_13)
+#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134) || IMX_ANDROID_13)
 			  int link_id,
 #endif
 			  t_u8 key_index,
@@ -1601,7 +1601,7 @@ int woal_cfg80211_del_key(struct wiphy *wiphy, struct net_device *netdev,
 #endif
 int woal_cfg80211_set_default_key(struct wiphy *wiphy,
 				  struct net_device *netdev,
-#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 0, 0) || IMX_ANDROID_13)
+#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134) || IMX_ANDROID_13)
 				  int link_id,
 #endif
 				  t_u8 key_index
@@ -1636,7 +1636,7 @@ int woal_cfg80211_set_default_key(struct wiphy *wiphy,
 #if KERNEL_VERSION(2, 6, 30) <= CFG80211_VERSION_CODE
 int woal_cfg80211_set_default_mgmt_key(struct wiphy *wiphy,
 				       struct net_device *netdev,
-#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 0, 0) || IMX_ANDROID_13)
+#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134) || IMX_ANDROID_13)
 				       int link_id,
 #endif
 				       t_u8 key_index)
@@ -1650,7 +1650,7 @@ int woal_cfg80211_set_default_mgmt_key(struct wiphy *wiphy,
 #if KERNEL_VERSION(5, 10, 0) <= CFG80211_VERSION_CODE
 int woal_cfg80211_set_default_beacon_key(struct wiphy *wiphy,
 					 struct net_device *netdev,
-#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 0, 0) || IMX_ANDROID_13)
+#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134) || IMX_ANDROID_13)
 					 int link_id,
 #endif
 					 t_u8 key_index)
@@ -2237,7 +2237,7 @@ done:
  * @return                0 -- success, otherwise fail
  */
 int woal_cfg80211_set_bitrate_mask(struct wiphy *wiphy, struct net_device *dev,
-#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 19, 2)) || IMX_ANDROID_13)
+#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134)) || IMX_ANDROID_13)
 				   unsigned int link_id,
 #endif
 				   const u8 *peer,
@@ -4948,7 +4948,7 @@ void woal_cfg80211_notify_channel(moal_private *priv,
 #if KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
 		mutex_lock(&priv->wdev->mtx);
 #endif
-#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 19, 2)) || IMX_ANDROID_13)
+#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134)) || IMX_ANDROID_13)
 		cfg80211_ch_switch_notify(priv->netdev, &chandef, 0);
 #else
 		cfg80211_ch_switch_notify(priv->netdev, &chandef);

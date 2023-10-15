@@ -3458,7 +3458,7 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 			PRINTM(MMSG,
 			       "Channel Under Nop: notify cfg80211 new channel=%d\n",
 			       priv->channel);
-#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 19, 2)) || IMX_ANDROID_13)
+#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134)) || IMX_ANDROID_13)
 			cfg80211_ch_switch_notify(priv->netdev, &priv->chan, 0);
 #else
 			cfg80211_ch_switch_notify(priv->netdev, &priv->chan);
@@ -3792,7 +3792,7 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 						PRINTM(MEVENT,
 						       "HostMlme %s: Receive deauth/disassociate\n",
 						       priv->netdev->name);
-#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 19, 2)) || IMX_ANDROID_13)
+#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134)) || IMX_ANDROID_13)
 						if (!priv->wdev->connected) {
 #else
 						if (!priv->wdev->current_bss) {
@@ -4166,7 +4166,7 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 		roam_info =
 			kzalloc(sizeof(struct cfg80211_roam_info), GFP_ATOMIC);
 		if (roam_info) {
-#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)) || IMX_ANDROID_13)
+#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 134)) || IMX_ANDROID_13)
 			roam_info->links[0].bssid = priv->cfg_bssid;
 #else
 			roam_info->bssid = priv->cfg_bssid;
