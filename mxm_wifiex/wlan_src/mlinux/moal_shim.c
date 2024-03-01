@@ -3907,7 +3907,9 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 			PRINTM(MMSG,
 			       "Channel Under Nop: notify cfg80211 new channel=%d\n",
 			       priv->channel);
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+			cfg80211_ch_switch_notify(priv->netdev, &priv->chan, 0);
+#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
 			cfg80211_ch_switch_notify(priv->netdev, &priv->chan, 0,
 						  0);
 #elif ((CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && IMX_ANDROID_13))

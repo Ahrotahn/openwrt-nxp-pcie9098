@@ -5171,7 +5171,9 @@ void woal_cfg80211_notify_channel(moal_private *priv,
 #elif KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
 		mutex_lock(&priv->wdev->mtx);
 #endif
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
+		cfg80211_ch_switch_notify(priv->netdev, &chandef, 0);
+#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
 		cfg80211_ch_switch_notify(priv->netdev, &chandef, 0, 0);
 #elif ((CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && IMX_ANDROID_13))
 		cfg80211_ch_switch_notify(priv->netdev, &chandef, 0, 0);
