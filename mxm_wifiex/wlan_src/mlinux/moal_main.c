@@ -60,6 +60,9 @@ Change log:
 #include <linux/tcp.h>
 #include <net/tcp.h>
 #include <net/dsfield.h>
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0)
+#include <net/rps.h>
+#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
 #include <linux/mpls.h>
 #endif
