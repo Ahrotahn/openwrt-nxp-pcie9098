@@ -178,7 +178,7 @@ endif
 
 LD += -S
 
-BINDIR = ../bin_wlan
+BINDIR = bin_wlan
 APPDIR= $(shell if test -d "mapp"; then echo mapp; fi)
 
 #############################################################################
