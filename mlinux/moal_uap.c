@@ -2557,7 +2557,7 @@ done:
  *
  * @return           0 --success, otherwise fail
  */
-int woal_uap_wacp_mode(struct net_device *dev, struct ifreq *req)
+static int woal_uap_wacp_mode(struct net_device *dev, struct ifreq *req)
 {
 	moal_private *priv = (moal_private *)netdev_priv(dev);
 	mlan_ioctl_req *ioctl_req = NULL;

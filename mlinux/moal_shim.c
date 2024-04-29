@@ -2765,7 +2765,7 @@ static mlan_status wlan_process_defer_event(moal_handle *handle,
  *
  *  @return         N/A
  */
-t_void woal_process_event_tx_status(moal_private *priv,
+static t_void woal_process_event_tx_status(moal_private *priv,
 				    tx_mgmt_status_event *tx_status)
 {
 	unsigned long flag;
