@@ -4,7 +4,7 @@
   * @brief This file contains private ioctl functions
 
   *
-  * Copyright 2014-2023 NXP
+  * Copyright 2014-2024 NXP
   *
   * This software file (the File) is distributed by NXP
   * under the terms of the GNU General Public License Version 2, June 1991
@@ -4076,7 +4076,7 @@ done:
 static int woal_priv_assocessid(moal_private *priv, t_u8 *respbuf,
 				t_u32 respbuflen, t_u8 bBSSID)
 {
-	mlan_ssid_bssid ssid_bssid;
+	mlan_ssid_bssid *ssid_bssid = NULL;
 	moal_handle *handle = priv->phandle;
 	int ret = 0;
 	int header_len = 0;
@@ -4102,7 +4102,12 @@ static int woal_priv_assocessid(moal_private *priv, t_u8 *respbuf,
 	copy_len = strlen(respbuf) - header_len;
 	buflen = MIN(copy_len, (int)(sizeof(buf) - 1));
 	memset(buf, 0, sizeof(buf));
-	memset(&ssid_bssid, 0, sizeof(mlan_ssid_bssid));
+	ssid_bssid = kzalloc(sizeof(mlan_ssid_bssid), GFP_ATOMIC);
+	if (!ssid_bssid) {
+		PRINTM(MERROR, "Fail to allocate ssid_bssid buffer\n");
+		LEAVE();
+		return -ENOMEM;
+	}
 	moal_memcpy_ext(handle, buf, respbuf + header_len, buflen, sizeof(buf));
 	priv->assoc_with_mac = MFALSE;
 
@@ -4124,7 +4129,7 @@ static int woal_priv_assocessid(moal_private *priv, t_u8 *respbuf,
 			if (buf[i] == ':') {
 				mac_idx++;
 			} else {
-				ssid_bssid.bssid[mac_idx] =
+				ssid_bssid->bssid[mac_idx] =
 					(t_u8)woal_atox(buf + i);
 				while ((i < buflen) && isxdigit(buf[i + 1]))
 					/* Skip entire hex value */
@@ -4134,32 +4139,32 @@ static int woal_priv_assocessid(moal_private *priv, t_u8 *respbuf,
 		/* Skip one space between the BSSID and start of the SSID */
 		i++;
 		PRINTM(MMSG, "Trying to associate AP BSSID = [" MACSTR "]\n",
-		       MAC2STR(ssid_bssid.bssid));
+		       MAC2STR(ssid_bssid->bssid));
 		priv->assoc_with_mac = MTRUE;
 	}
 
-	ssid_bssid.ssid.ssid_len = buflen - i;
+	ssid_bssid->ssid.ssid_len = buflen - i;
 	/* Check the size of the ssid_len */
-	if (ssid_bssid.ssid.ssid_len > MLAN_MAX_SSID_LENGTH + 1) {
-		PRINTM(MERROR, "ssid_bssid.ssid.ssid_len = %d\n",
-		       ssid_bssid.ssid.ssid_len);
+	if (ssid_bssid->ssid.ssid_len > MLAN_MAX_SSID_LENGTH + 1) {
+		PRINTM(MERROR, "ssid_bssid->ssid.ssid_len = %d\n",
+		       ssid_bssid->ssid.ssid_len);
 		ret = -E2BIG;
 		goto setessid_ret;
 	}
 
 	/* Copy the SSID */
-	moal_memcpy_ext(handle, ssid_bssid.ssid.ssid, buf + i,
-			ssid_bssid.ssid.ssid_len, MLAN_MAX_SSID_LENGTH);
+	moal_memcpy_ext(handle, ssid_bssid->ssid.ssid, buf + i,
+			ssid_bssid->ssid.ssid_len, MLAN_MAX_SSID_LENGTH);
 
-	if (!ssid_bssid.ssid.ssid_len ||
-	    (MFALSE == woal_ssid_valid(&ssid_bssid.ssid))) {
+	if (!ssid_bssid->ssid.ssid_len ||
+	    (MFALSE == woal_ssid_valid(&ssid_bssid->ssid))) {
 		PRINTM(MERROR, "Invalid SSID - aborting set_essid\n");
 		ret = -EINVAL;
 		goto setessid_ret;
 	}
 
 	PRINTM(MMSG, "Trying to associate AP SSID = %s\n",
-	       (char *)ssid_bssid.ssid.ssid);
+	       (char *)ssid_bssid->ssid.ssid);
 
 	/* Cancel re-association */
 	priv->reassoc_required = MFALSE;
@@ -4174,14 +4179,14 @@ static int woal_priv_assocessid(moal_private *priv, t_u8 *respbuf,
 	if (priv->scan_type == MLAN_SCAN_TYPE_PASSIVE)
 		woal_set_scan_type(priv, MLAN_SCAN_TYPE_ACTIVE);
 
-	if (MTRUE == woal_is_connected(priv, &ssid_bssid)) {
+	if (MTRUE == woal_is_connected(priv, ssid_bssid)) {
 		PRINTM(MIOCTL, "Already connect to the network\n");
 		ret = snprintf(respbuf, CMD_BUF_LEN,
 			       "Has already connected to this ESSID!\n") +
 		      1;
 		goto setessid_ret;
 	}
-	moal_memcpy_ext(handle, &priv->prev_ssid_bssid, &ssid_bssid,
+	moal_memcpy_ext(handle, &priv->prev_ssid_bssid, ssid_bssid,
 			sizeof(mlan_ssid_bssid), sizeof(mlan_ssid_bssid));
 	priv->auto_assoc_priv.drv_reconnect.status = MFALSE;
 	priv->auto_assoc_priv.auto_assoc_trigger_flag =
@@ -4199,6 +4204,7 @@ static int woal_priv_assocessid(moal_private *priv, t_u8 *respbuf,
 	ret = snprintf(respbuf, CMD_BUF_LEN, "%s\n", buf) + 1;
 
 setessid_ret:
+	kfree(ssid_bssid);
 	if (priv->scan_type == MLAN_SCAN_TYPE_PASSIVE)
 		woal_set_scan_type(priv, MLAN_SCAN_TYPE_PASSIVE);
 	MOAL_REL_SEMAPHORE(&handle->reassoc_sem);
@@ -5679,7 +5685,7 @@ static int woal_priv_set_ap(moal_private *priv, t_u8 *respbuf, t_u32 respbuflen)
 	t_u8 *data_ptr;
 	const t_u8 bcast[MLAN_MAC_ADDR_LENGTH] = {255, 255, 255, 255, 255, 255};
 	const t_u8 zero_mac[MLAN_MAC_ADDR_LENGTH] = {0, 0, 0, 0, 0, 0};
-	mlan_ssid_bssid ssid_bssid;
+	mlan_ssid_bssid *ssid_bssid = NULL;
 	mlan_bss_info bss_info;
 	struct mwreq *mwr;
 	struct sockaddr *awrq;
@@ -5717,8 +5723,12 @@ static int woal_priv_set_ap(moal_private *priv, t_u8 *respbuf, t_u32 respbuflen)
 		goto done;
 	}
 
-	/* Broadcast MAC means search for best network */
-	memset(&ssid_bssid, 0, sizeof(mlan_ssid_bssid));
+	ssid_bssid = kzalloc(sizeof(mlan_ssid_bssid), GFP_ATOMIC);
+	if (!ssid_bssid) {
+		PRINTM(MERROR, "Fail to allocate ssid_bssid buffer\n");
+		ret = -ENOMEM;
+		goto done;
+	}
 
 	if (memcmp(bcast, awrq->sa_data, MLAN_MAC_ADDR_LENGTH)) {
 		/* Check if we are already assoicated to the AP */
@@ -5726,21 +5736,22 @@ static int woal_priv_set_ap(moal_private *priv, t_u8 *respbuf, t_u32 respbuflen)
 			if (!memcmp(awrq->sa_data, &bss_info.bssid, ETH_ALEN))
 				goto done;
 		}
-		moal_memcpy_ext(priv->phandle, &ssid_bssid.bssid, awrq->sa_data,
-				ETH_ALEN, sizeof(mlan_802_11_mac_addr));
+		moal_memcpy_ext(priv->phandle, &ssid_bssid->bssid,
+				awrq->sa_data, ETH_ALEN,
+				sizeof(mlan_802_11_mac_addr));
 	}
 
 	if (MLAN_STATUS_SUCCESS !=
-	    woal_find_best_network(priv, MOAL_IOCTL_WAIT, &ssid_bssid)) {
+	    woal_find_best_network(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 		PRINTM(MERROR,
 		       "ASSOC: WAP: MAC address not found in BSSID List\n");
 		ret = -ENETUNREACH;
 		goto done;
 	}
 	/* Zero SSID implies use BSSID to connect */
-	memset(&ssid_bssid.ssid, 0, sizeof(mlan_802_11_ssid));
+	memset(&ssid_bssid->ssid, 0, sizeof(mlan_802_11_ssid));
 	if (MLAN_STATUS_SUCCESS !=
-	    woal_bss_start(priv, MOAL_IOCTL_WAIT, &ssid_bssid)) {
+	    woal_bss_start(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 		ret = -EFAULT;
 		goto done;
 	}
@@ -5761,6 +5772,8 @@ static int woal_priv_set_ap(moal_private *priv, t_u8 *respbuf, t_u32 respbuflen)
 #endif /* REASSOCIATION */
 
 done:
+	if (ssid_bssid)
+		kfree(ssid_bssid);
 	LEAVE();
 	return ret;
 }
@@ -5879,7 +5892,7 @@ static int woal_priv_set_essid(moal_private *priv, t_u8 *respbuf,
 			       t_u32 respbuflen)
 {
 	mlan_802_11_ssid req_ssid;
-	mlan_ssid_bssid ssid_bssid;
+	mlan_ssid_bssid *ssid_bssid = NULL;
 	moal_handle *handle = priv->phandle;
 #ifdef REASSOCIATION
 	mlan_bss_info bss_info;
@@ -5914,7 +5927,13 @@ static int woal_priv_set_essid(moal_private *priv, t_u8 *respbuf,
 	if (priv->scan_type == MLAN_SCAN_TYPE_PASSIVE)
 		woal_set_scan_type(priv, MLAN_SCAN_TYPE_ACTIVE);
 	memset(&req_ssid, 0, sizeof(mlan_802_11_ssid));
-	memset(&ssid_bssid, 0, sizeof(mlan_ssid_bssid));
+
+	ssid_bssid = kzalloc(sizeof(mlan_ssid_bssid), GFP_ATOMIC);
+	if (!ssid_bssid) {
+		PRINTM(MERROR, "Fail to allocate ssid_bssid buffer\n");
+		ret = -ENOMEM;
+		goto setessid_ret;
+	}
 
 	req_ssid.ssid_len = mwr->u.essid.length;
 
@@ -5948,10 +5967,10 @@ static int woal_priv_set_essid(moal_private *priv, t_u8 *respbuf,
 
 		PRINTM(MINFO, "Requested new SSID = %s\n",
 		       (char *)req_ssid.ssid);
-		moal_memcpy_ext(handle, &ssid_bssid.ssid, &req_ssid,
+		moal_memcpy_ext(handle, &ssid_bssid->ssid, &req_ssid,
 				sizeof(mlan_802_11_ssid),
 				sizeof(mlan_802_11_ssid));
-		if (MTRUE == woal_is_connected(priv, &ssid_bssid)) {
+		if (MTRUE == woal_is_connected(priv, ssid_bssid)) {
 			PRINTM(MIOCTL, "Already connect to the network\n");
 			goto setessid_ret;
 		}
@@ -5990,7 +6009,7 @@ static int woal_priv_set_essid(moal_private *priv, t_u8 *respbuf,
 
 		if (mwr->u.essid.flags != 0xFFFF) {
 			if (MLAN_STATUS_SUCCESS !=
-			    woal_find_essid(priv, &ssid_bssid,
+			    woal_find_essid(priv, ssid_bssid,
 					    MOAL_IOCTL_WAIT)) {
 				/* Do specific SSID scanning */
 				if (MLAN_STATUS_SUCCESS !=
@@ -6007,24 +6026,23 @@ static int woal_priv_set_essid(moal_private *priv, t_u8 *respbuf,
 
 	if (mode != MW_MODE_ADHOC) {
 		if (MLAN_STATUS_SUCCESS !=
-		    woal_find_best_network(priv, MOAL_IOCTL_WAIT,
-					   &ssid_bssid)) {
+		    woal_find_best_network(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 			ret = -EFAULT;
 			goto setessid_ret;
 		}
 	}
 #ifdef UAP_SUPPORT
 	else if (MLAN_STATUS_SUCCESS !=
-		 woal_find_best_network(priv, MOAL_IOCTL_WAIT, &ssid_bssid))
+		 woal_find_best_network(priv, MOAL_IOCTL_WAIT, ssid_bssid))
 		/* Adhoc start, Check the channel command */
 		woal_11h_channel_check_ioctl(priv, MOAL_IOCTL_WAIT);
 #endif
 
 	/* Connect to BSS by ESSID */
-	memset(&ssid_bssid.bssid, 0, MLAN_MAC_ADDR_LENGTH);
+	memset(&ssid_bssid->bssid, 0, MLAN_MAC_ADDR_LENGTH);
 
 	if (MLAN_STATUS_SUCCESS !=
-	    woal_bss_start(priv, MOAL_IOCTL_WAIT, &ssid_bssid)) {
+	    woal_bss_start(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 		ret = -EFAULT;
 		goto setessid_ret;
 	}
@@ -6043,6 +6061,8 @@ static int woal_priv_set_essid(moal_private *priv, t_u8 *respbuf,
 #endif /* REASSOCIATION */
 
 setessid_ret:
+	if (ssid_bssid)
+		kfree(ssid_bssid);
 	if (priv->scan_type == MLAN_SCAN_TYPE_PASSIVE)
 		woal_set_scan_type(priv, MLAN_SCAN_TYPE_PASSIVE);
 #ifdef REASSOCIATION
@@ -8691,7 +8711,7 @@ static int woal_priv_drcs_time_slicing_cfg(moal_private *priv, t_u8 *respbuf,
 		drcs_cfg = (mlan_ds_drcs_cfg *)&cfg->param.drcs_cfg[0];
 		drcs_cfg->chantime = (t_u8)data[0];
 		drcs_cfg->switchtime = (t_u8)data[1];
-		drcs_cfg->undozetime = (t_u8)data[2];
+		drcs_cfg->rx_wait_time = (t_u8)data[2];
 		drcs_cfg->mode = (t_u8)data[3];
 		/* Set the same parameters for two channels*/
 		if (user_data_len < (int)ARRAY_SIZE(data))
@@ -8703,7 +8723,7 @@ static int woal_priv_drcs_time_slicing_cfg(moal_private *priv, t_u8 *respbuf,
 			drcs_cfg->chan_idx = 0x2;
 			drcs_cfg->chantime = (t_u8)data[4];
 			drcs_cfg->switchtime = (t_u8)data[5];
-			drcs_cfg->undozetime = (t_u8)data[6];
+			drcs_cfg->rx_wait_time = (t_u8)data[6];
 			drcs_cfg->mode = (t_u8)data[7];
 		}
 	}
@@ -13828,7 +13848,7 @@ static int woal_priv_associate_ssid_bssid(moal_private *priv, t_u8 *respbuf,
 {
 	int ret = 0, copy_len = 0;
 	int header_len = 0;
-	mlan_ssid_bssid ssid_bssid;
+	mlan_ssid_bssid *ssid_bssid = NULL;
 #ifdef REASSOCIATION
 	mlan_bss_info bss_info;
 #endif
@@ -13849,7 +13869,12 @@ static int woal_priv_associate_ssid_bssid(moal_private *priv, t_u8 *respbuf,
 	mac_idx = 0;
 	buflen = MIN(copy_len, (int)(sizeof(buf) - 1));
 	memset(buf, 0, sizeof(buf));
-	memset(&ssid_bssid, 0, sizeof(ssid_bssid));
+	ssid_bssid = kzalloc(sizeof(mlan_ssid_bssid), GFP_ATOMIC);
+	if (!ssid_bssid) {
+		PRINTM(MERROR, "Fail to allocate ssid_bssid buffer\n");
+		ret = -ENOMEM;
+		goto done;
+	}
 
 	if (buflen < (3 * ETH_ALEN) + 2) {
 		PRINTM(MERROR,
@@ -13874,7 +13899,7 @@ static int woal_priv_associate_ssid_bssid(moal_private *priv, t_u8 *respbuf,
 		if (buf[i] == ':') {
 			mac_idx++;
 		} else {
-			ssid_bssid.bssid[mac_idx] = (t_u8)woal_atox(buf + i);
+			ssid_bssid->bssid[mac_idx] = (t_u8)woal_atox(buf + i);
 
 			while (((i < buflen) && isxdigit(buf[i + 1])))
 				/* Skip entire hex value */
@@ -13886,17 +13911,17 @@ static int woal_priv_associate_ssid_bssid(moal_private *priv, t_u8 *respbuf,
 	i++;
 
 	/* Copy the SSID */
-	ssid_bssid.ssid.ssid_len = buflen - i;
-	moal_memcpy_ext(priv->phandle, ssid_bssid.ssid.ssid, buf + i,
-			sizeof(ssid_bssid.ssid.ssid),
-			sizeof(ssid_bssid.ssid.ssid));
+	ssid_bssid->ssid.ssid_len = buflen - i;
+	moal_memcpy_ext(priv->phandle, ssid_bssid->ssid.ssid, buf + i,
+			sizeof(ssid_bssid->ssid.ssid),
+			sizeof(ssid_bssid->ssid.ssid));
 
 	PRINTM(MCMND, "iwpriv assoc: AP=[" MACSTR "], ssid(%d)=[%s]\n",
-	       MAC2STR(ssid_bssid.bssid), (int)ssid_bssid.ssid.ssid_len,
-	       ssid_bssid.ssid.ssid);
+	       MAC2STR(ssid_bssid->bssid), (int)ssid_bssid->ssid.ssid_len,
+	       ssid_bssid->ssid.ssid);
 
 	if (MLAN_STATUS_SUCCESS !=
-	    woal_bss_start(priv, MOAL_IOCTL_WAIT, &ssid_bssid)) {
+	    woal_bss_start(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 		ret = -EFAULT;
 		goto done;
 	}
@@ -13915,6 +13940,8 @@ static int woal_priv_associate_ssid_bssid(moal_private *priv, t_u8 *respbuf,
 #endif /* REASSOCIATION */
 
 done:
+	if (ssid_bssid)
+		kfree(ssid_bssid);
 	LEAVE();
 	return ret;
 }
@@ -15193,6 +15220,62 @@ static int woal_priv_twt_report(moal_private *priv, t_u8 *respbuf, t_u8 len,
 	}
 
 	ret = sizeof(mlan_ds_twt_report);
+done:
+	if (status != MLAN_STATUS_PENDING) {
+		kfree(req);
+	}
+	LEAVE();
+	return ret;
+}
+
+/**
+ * @brief               Configure TWT Information parameters
+ *
+ * @param priv          Pointer to the mlan_private driver data struct
+ * @param respbuf       A pointer to response buffer
+ * @param len           Length used
+ * @param respbuflen    Available length of response buffer
+ *
+ * @return              Number of bytes written if successful else negative
+ * value
+ */
+static int woal_priv_twt_information(moal_private *priv, t_u8 *respbuf,
+				     t_u8 len, t_u32 respbuflen)
+{
+	mlan_ioctl_req *req = NULL;
+	mlan_ds_twtcfg *cfg = NULL;
+	int ret = 0;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+
+	ENTER();
+
+	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_twtcfg));
+	if (req == NULL) {
+		PRINTM(MERROR, "Failed to allocate ioctl_req!\n");
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	req->req_id = MLAN_IOCTL_11AX_CFG;
+	req->action = MLAN_ACT_SET;
+	cfg = (mlan_ds_twtcfg *)req->pbuf;
+	cfg->sub_command = MLAN_OID_11AX_TWT_CFG;
+	cfg->sub_id = MLAN_11AX_TWT_INFORMATION_SUBID;
+
+	if (len) {
+		moal_memcpy_ext(priv->phandle,
+				(t_u8 *)&cfg->param.twt_information, respbuf,
+				len, sizeof(mlan_ds_twt_information));
+	}
+
+	status = woal_request_ioctl(priv, req, MOAL_IOCTL_WAIT);
+	if (status != MLAN_STATUS_SUCCESS) {
+		PRINTM(MERROR, "woal_request_ioctl failed!\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	ret = sizeof(mlan_ds_twt_information);
 done:
 	if (status != MLAN_STATUS_PENDING) {
 		kfree(req);
@@ -21285,6 +21368,21 @@ int woal_android_priv_cmd(struct net_device *dev, struct ifreq *req)
 						   priv_cmd.total_len);
 			len += strlen(PRIV_CMD_TWT_REPORT) + strlen(CMD_NXP);
 			goto handled;
+
+		} else if (strnicmp(buf + strlen(CMD_NXP),
+				    PRIV_CMD_TWT_INFORMATION,
+				    strlen(PRIV_CMD_TWT_INFORMATION)) == 0) {
+			pdata = buf + strlen(CMD_NXP) +
+				strlen(PRIV_CMD_TWT_INFORMATION);
+			len = priv_cmd.used_len -
+			      strlen(PRIV_CMD_TWT_INFORMATION) -
+			      strlen(CMD_NXP);
+			len = woal_priv_twt_information(priv, pdata, len,
+							priv_cmd.total_len);
+			len += strlen(PRIV_CMD_TWT_INFORMATION) +
+			       strlen(CMD_NXP);
+			goto handled;
+
 #if defined(STA_CFG80211) || defined(UAP_CFG80211)
 		} else if (strnicmp(buf + strlen(CMD_NXP),
 				    PRIV_CMD_GET_CFG_CHAN_LIST,

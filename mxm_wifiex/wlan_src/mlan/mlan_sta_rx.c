@@ -890,8 +890,12 @@ mlan_status wlan_ops_sta_process_rx_packet(t_void *adapter, pmlan_buffer pmbuf)
 	 */
 	if ((!IS_11N_ENABLED(priv) &&
 	     !(prx_pd->flags & RXPD_FLAG_PKT_DIRECT_LINK)) ||
-	    memcmp(priv->adapter, priv->curr_addr,
-		   prx_pkt->eth803_hdr.dest_addr, MLAN_MAC_ADDR_LENGTH)) {
+	    (memcmp(priv->adapter, priv->curr_addr,
+		    prx_pkt->eth803_hdr.dest_addr, MLAN_MAC_ADDR_LENGTH) &&
+	     !(prx_pd->flags & RXPD_FLAG_PKT_EASYMESH)) ||
+	    ((prx_pd->flags & RXPD_FLAG_PKT_EASYMESH) &&
+	     (is_bcast_addr(prx_pkt->eth803_hdr.dest_addr) ||
+	      is_mcast_addr(prx_pkt->eth803_hdr.dest_addr)))) {
 		priv->snr = prx_pd->snr;
 		priv->nf = prx_pd->nf;
 		wlan_process_rx_packet(pmadapter, pmbuf);

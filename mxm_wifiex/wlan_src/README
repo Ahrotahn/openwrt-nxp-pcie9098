@@ -9,7 +9,7 @@
 	Goto source code directory wlan_src/.
 	make [clean] build
 	The driver and utility binaries can be found in ../bin_xxxx directory.
-	The driver code supports Linux kernel from 2.6.32 to 6.6.2.
+	The driver code supports Linux kernel from 2.6.32 to 6.7.0.
 
 2) FOR DRIVER INSTALL
 
@@ -1033,6 +1033,7 @@
 	Beamforming           (0:disable, 1:enable)
 	GreenField Mode       (0:disable, 1:enable)
 	STBC                  (0:disable, 1:enable)
+	Signal Bw             (0: 20Mhz, 1: 40Mhz, 4:80Mhz, -1: Set to default)
 	NumPkt                (Set to default value -1)
 	MaxPktExt             (Set to default value -1)
 	BeamChange            (Set to default value -1)
@@ -1045,7 +1046,7 @@
 	Example: To start Tx frame with duty cycle, first stop any ongoing Tx
         and then start Tx frame:
 	echo "tx_frame=0" > /proc/mwlan/adapterX/config
-	echo "tx_frame=1 7 0xAAA 0x100 1 20 0 0 0 0 0 0 0 05:43:3f:c4:51" > /proc/mwlan/adapterX/config
+	echo "tx_frame=1 7 0xAAA 0x100 1 20 0 0 0 0 0 0 0 0 -1 -1 -1 -1 -1 -1 -1 05:43:3f:c4:51" > /proc/mwlan/adapterX/config
 
     Configure Trigger Frame
     Example: To configure Trigger frame:

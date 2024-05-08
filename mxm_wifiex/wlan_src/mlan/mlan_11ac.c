@@ -216,7 +216,8 @@ static mlan_status wlan_11ac_ioctl_vhtcfg(pmlan_adapter pmadapter,
 	t_u8 nss = 0;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	t_u16 rx_nss = 0;
 	t_u16 tx_nss = 0;
 #endif
@@ -300,7 +301,8 @@ static mlan_status wlan_11ac_ioctl_vhtcfg(pmlan_adapter pmadapter,
 		if (cfg->param.vht_cfg.txrx & MLAN_RADIO_RX) {
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 			if (IS_CARD9098(pmadapter->card_type) ||
 			    IS_CARDIW624(pmadapter->card_type) ||
 			    IS_CARD9097(pmadapter->card_type) ||
@@ -335,7 +337,8 @@ static mlan_status wlan_11ac_ioctl_vhtcfg(pmlan_adapter pmadapter,
 					nss);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 				if ((rx_nss != 0) && (nss > rx_nss))
 					cfg_value = NO_NSS_SUPPORT;
 #endif
@@ -363,7 +366,8 @@ static mlan_status wlan_11ac_ioctl_vhtcfg(pmlan_adapter pmadapter,
 					nss);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 				if ((tx_nss != 0) && (nss > tx_nss))
 					cfg_value = NO_NSS_SUPPORT;
 #endif
@@ -789,7 +793,8 @@ void wlan_fill_vht_cap_tlv(mlan_private *priv, MrvlIETypes_VHTCap_t *pvht_cap,
 	t_u16 nss;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	t_u16 rx_nss = 0, tx_nss = 0;
 #endif
 	ENTER();
@@ -811,7 +816,8 @@ void wlan_fill_vht_cap_tlv(mlan_private *priv, MrvlIETypes_VHTCap_t *pvht_cap,
 			wlan_le16_to_cpu(pvht_cap->vht_cap.mcs_sets.rx_mcs_map);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	if (IS_CARD9098(priv->adapter->card_type) ||
 	    IS_CARDIW624(priv->adapter->card_type) ||
 	    IS_CARD9097(priv->adapter->card_type) ||
@@ -838,7 +844,8 @@ void wlan_fill_vht_cap_tlv(mlan_private *priv, MrvlIETypes_VHTCap_t *pvht_cap,
 		mcs_resp = GET_VHTNSSMCS(mcs_map_resp, nss);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if ((rx_nss != 0) && (nss > rx_nss))
 			mcs_user = NO_NSS_SUPPORT;
 #endif
@@ -871,7 +878,8 @@ void wlan_fill_vht_cap_tlv(mlan_private *priv, MrvlIETypes_VHTCap_t *pvht_cap,
 		mcs_resp = GET_VHTNSSMCS(mcs_map_resp, nss);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if ((tx_nss != 0) && (nss > tx_nss))
 			mcs_user = NO_NSS_SUPPORT;
 #endif
@@ -1088,7 +1096,8 @@ t_u8 wlan_is_80_80_support(mlan_private *pmpriv, BSSDescriptor_t *pbss_desc)
 	t_u8 ret = MFALSE;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	t_u16 rx_nss = 0, tx_nss = 0;
 	IEEEtypes_VHTCap_t *pvht_cap = pbss_desc->pvht_cap;
 	MrvlIEtypes_He_cap_t *phecap = MNULL;
@@ -1099,7 +1108,8 @@ t_u8 wlan_is_80_80_support(mlan_private *pmpriv, BSSDescriptor_t *pbss_desc)
 
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	if (!IS_CARD9098(pmpriv->adapter->card_type) &&
 	    !IS_CARDIW624(pmpriv->adapter->card_type) &&
 	    !IS_CARD9097(pmpriv->adapter->card_type) &&
@@ -1155,7 +1165,8 @@ int wlan_cmd_append_11ac_tlv(mlan_private *pmpriv, BSSDescriptor_t *pbss_desc,
 	t_u8 bw_80p80 = MFALSE;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	t_u16 rx_nss = 0;
 #endif
 
@@ -1227,7 +1238,8 @@ int wlan_cmd_append_11ac_tlv(mlan_private *pmpriv, BSSDescriptor_t *pbss_desc,
 		SET_OPER_MODE_80M(pmrvl_oper_mode->oper_mode);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if (IS_CARD9098(pmadapter->card_type) ||
 		    IS_CARDIW624(pmadapter->card_type) ||
 		    IS_CARD9097(pmadapter->card_type) ||
@@ -1246,7 +1258,8 @@ int wlan_cmd_append_11ac_tlv(mlan_private *pmpriv, BSSDescriptor_t *pbss_desc,
 
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if (IS_CARD9098(pmadapter->card_type) ||
 		    IS_CARDIW624(pmadapter->card_type) ||
 		    IS_CARD9097(pmadapter->card_type) ||

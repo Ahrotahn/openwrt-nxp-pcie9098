@@ -3,7 +3,7 @@
  *  @brief This file contains SDIO specific code
  *
  *
- *  Copyright 2008-2021 NXP
+ *  Copyright 2008-2021, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -225,7 +225,8 @@ static const struct _mlan_card_info mlan_card_info_sd8897 = {
 
 #if defined(SD8977) || defined(SD8997) || defined(SD8987) ||                   \
 	defined(SD9098) || defined(SD9097) || defined(SDIW624) ||              \
-	defined(SD8978) || defined(SD9177) || defined(SDIW615)
+	defined(SDAW693) || defined(SD8978) || defined(SD9177) ||              \
+	defined(SDIW615)
 static const struct _mlan_sdio_card_reg mlan_reg_sd8977_sd8997 = {
 	.start_rd_port = 0,
 	.start_wr_port = 0,
@@ -317,6 +318,17 @@ static const struct _mlan_card_info mlan_card_info_sd9097 = {
 
 #ifdef SDIW624
 static const struct _mlan_card_info mlan_card_info_sdiw624 = {
+	.max_tx_buf_size = MLAN_TX_DATA_BUF_SIZE_4K,
+	.v16_fw_api = 1,
+	.v17_fw_api = 1,
+	.supp_ps_handshake = 0,
+	.default_11n_tx_bf_cap = DEFAULT_11N_TX_BF_CAP_2X2,
+	.support_11mc = 1,
+};
+#endif
+
+#ifdef SDAW693
+static const struct _mlan_card_info mlan_card_info_sdaw693 = {
 	.max_tx_buf_size = MLAN_TX_DATA_BUF_SIZE_4K,
 	.v16_fw_api = 1,
 	.v17_fw_api = 1,
@@ -1055,7 +1067,8 @@ static mlan_status wlan_sdio_prog_fw_w_helper(pmlan_adapter pmadapter, t_u8 *fw,
 			check_fw_status = MTRUE;
 	}
 #endif
-#if defined(SD9097) || defined(SD9177) || defined(SDIW624) || defined(SDIW615)
+#if defined(SD9097) || defined(SD9177) || defined(SDIW624) ||                  \
+	defined(SDAW693) || defined(SDIW615)
 	if (IS_SD9097(pmadapter->card_type) ||
 	    IS_SDIW624(pmadapter->card_type) ||
 	    IS_SDAW693(pmadapter->card_type) ||
@@ -2444,6 +2457,12 @@ mlan_status wlan_get_sdio_device(pmlan_adapter pmadapter)
 		pmadapter->pcard_info = &mlan_card_info_sdiw624;
 		break;
 #endif
+#ifdef SDAW693
+	case CARD_TYPE_SDAW693:
+		pmadapter->pcard_sd->reg = &mlan_reg_sd8977_sd8997;
+		pmadapter->pcard_info = &mlan_card_info_sdaw693;
+		break;
+#endif
 #ifdef SDIW615
 	case CARD_TYPE_SDIW615:
 		pmadapter->pcard_sd->reg = &mlan_reg_sd8977_sd8997;
@@ -3066,8 +3085,8 @@ exit:
 }
 
 #if defined(SD9098) || defined(SD9097) || defined(SDIW624) ||                  \
-	defined(SD9177) || defined(SD8997) || defined(SD8987) ||               \
-	defined(SD8978) || defined(SDIW615)
+	defined(SDAW693) || defined(SD9177) || defined(SD8997) ||              \
+	defined(SD8987) || defined(SD8978) || defined(SDIW615)
 /**
  *  @brief This function sends vdll data to the card.
  *
@@ -3129,8 +3148,8 @@ static mlan_status wlan_sdio_host_to_card_ext(pmlan_private pmpriv, t_u8 type,
 	mlan_adapter *pmadapter = pmpriv->adapter;
 
 #if defined(SD9098) || defined(SD9097) || defined(SDIW624) ||                  \
-	defined(SD9177) || defined(SD8997) || defined(SD8987) ||               \
-	defined(SD8978) || defined(SDIW615)
+	defined(SDAW693) || defined(SD9177) || defined(SD8997) ||              \
+	defined(SD8987) || defined(SD8978) || defined(SDIW615)
 	if (type == MLAN_TYPE_VDLL)
 		return wlan_sdio_send_vdll(pmadapter, pmbuf);
 #endif
@@ -3613,7 +3632,8 @@ mlan_status wlan_reset_fw(pmlan_adapter pmadapter)
 	}
 #if defined(SD8997) || defined(SD8977) || defined(SD8987) ||                   \
 	defined(SD9098) || defined(SD9097) || defined(SDIW624) ||              \
-	defined(SD8978) || defined(SD9177) || defined(SDIW615)
+	defined(SDAW693) || defined(SD8978) || defined(SD9177) ||              \
+	defined(SDIW615)
 	if (MFALSE
 #ifdef SD8997
 	    || IS_SD8997(pmadapter->card_type)
@@ -3635,6 +3655,9 @@ mlan_status wlan_reset_fw(pmlan_adapter pmadapter)
 #endif
 #ifdef SDIW624
 	    || IS_SDIW624(pmadapter->card_type)
+#endif
+#ifdef SDAW693
+	    || IS_SDAW693(pmadapter->card_type)
 #endif
 #ifdef SDIW615
 	    || IS_SDIW615(pmadapter->card_type)

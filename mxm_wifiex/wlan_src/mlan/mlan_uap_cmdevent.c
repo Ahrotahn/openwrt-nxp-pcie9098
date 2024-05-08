@@ -722,7 +722,8 @@ static mlan_status wlan_uap_cmd_ap_config(pmlan_private pmpriv,
 	t_u16 ac;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	int rx_mcs_supp = 0;
 #endif
 
@@ -1335,7 +1336,8 @@ static mlan_status wlan_uap_cmd_ap_config(pmlan_private pmpriv,
 			   sizeof(tlv_htcap->ht_cap.supported_mcs_set));
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if (IS_CARD9098(pmpriv->adapter->card_type) ||
 		    IS_CARDIW624(pmpriv->adapter->card_type) ||
 		    IS_CARD9097(pmpriv->adapter->card_type) ||
@@ -2488,6 +2490,7 @@ static mlan_status wlan_uap_ret_sys_config(pmlan_private pmpriv,
 	MrvlIEtypes_MacAddr_t *tlv =
 		(MrvlIEtypes_MacAddr_t *)sys_config->tlv_buffer;
 	mlan_ds_misc_custom_ie *cust_ie = MNULL;
+	MrvlIEtypes_wacp_mode_t *tlv_wacp_mode = MNULL;
 	tlvbuf_max_mgmt_ie *max_mgmt_ie = MNULL;
 	MrvlIEtypes_wmm_parameter_t *tlv_wmm_parameter =
 		(MrvlIEtypes_wmm_parameter_t *)sys_config->tlv_buffer;
@@ -2806,6 +2809,17 @@ static mlan_status wlan_uap_ret_sys_config(pmlan_private pmpriv,
 								sizeof(MrvlIEtypesHeader_t),
 							sizeof(tlvbuf_max_mgmt_ie));
 					}
+				}
+			} else if (misc->sub_command ==
+				   MLAN_OID_MISC_WACP_MODE) {
+				tlv_wacp_mode = (MrvlIEtypes_wacp_mode_t *)
+							sys_config->tlv_buffer;
+				misc->param.wacp_mode =
+					tlv_wacp_mode->wacp_mode;
+				/** update the wacp_mode in mlan_adapter */
+				if (pioctl_buf->action == MLAN_ACT_SET) {
+					pmpriv->adapter->init_para.wacp_mode =
+						misc->param.wacp_mode;
 				}
 			}
 		}
@@ -5616,12 +5630,15 @@ mlan_status wlan_ops_uap_process_event(t_void *priv)
 	ENTER();
 
 	if (!pmbuf) {
+		PRINTM(MERROR, "ERR:event buffer is null\n");
 		LEAVE();
 		return MLAN_STATUS_FAILURE;
 	}
 	/* Event length check */
 	if (pmbuf && (pmbuf->data_len - sizeof(eventcause)) > MAX_EVENT_SIZE) {
 		pmbuf->status_code = MLAN_ERROR_PKT_SIZE_INVALID;
+		PRINTM(MERROR, "ERR:event buffer len invalid=%d\n",
+		       pmbuf->data_len);
 		LEAVE();
 		return MLAN_STATUS_FAILURE;
 	}
@@ -6053,6 +6070,10 @@ mlan_status wlan_ops_uap_process_event(t_void *priv)
 	case EVENT_TX_STATUS_REPORT:
 		PRINTM(MINFO, "EVENT: TX_STATUS\n");
 		pevent->event_id = MLAN_EVENT_ID_FW_TX_STATUS;
+		break;
+	case EVENT_TX_STATUS_BULK_REPORT:
+		PRINTM(MINFO, "EVENT: TX_BULK_STATUS\n");
+		pevent->event_id = MLAN_EVENT_ID_FW_TX_BULK_STATUS;
 		break;
 	case EVENT_BT_COEX_WLAN_PARA_CHANGE:
 		PRINTM(MEVENT, "EVENT: BT coex wlan param update\n");

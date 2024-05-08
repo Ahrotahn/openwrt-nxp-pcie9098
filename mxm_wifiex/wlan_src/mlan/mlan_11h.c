@@ -3,7 +3,7 @@
  *  @brief This file contains functions for 802.11H.
  *
  *
- *  Copyright 2008-2021 NXP
+ *  Copyright 2008-2021, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -231,8 +231,8 @@ static t_u8 woal_get_bonded_channels(t_u8 pri_chan, t_u8 bw, t_u8 *chan_list)
  *
  *  @return  N/A
  */
-static t_void wlan_11h_set_chan_dfs_state(mlan_private *priv, t_u8 chan, t_u8 bw,
-				   dfs_state_t dfs_state)
+static t_void wlan_11h_set_chan_dfs_state(mlan_private *priv, t_u8 chan,
+					  t_u8 bw, dfs_state_t dfs_state)
 {
 	t_u8 n_chan;
 	t_u8 chan_list[4] = {0};

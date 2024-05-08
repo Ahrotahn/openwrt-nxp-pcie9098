@@ -33,9 +33,6 @@ Change log:
 #ifndef _MLAN_JOIN_H_
 #define _MLAN_JOIN_H_
 
-/** Size of buffer allocated to store the association response from firmware */
-#define MRVDRV_ASSOC_RSP_BUF_SIZE 500
-
 /** Size of buffer allocated to store IEs passed to firmware in the assoc req */
 #define MRVDRV_GENIE_BUF_SIZE 256
 

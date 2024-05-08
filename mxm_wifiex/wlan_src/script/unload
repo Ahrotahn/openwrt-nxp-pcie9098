@@ -9,6 +9,8 @@ ifconfig wfd0 down
 ifconfig wfd1 down
 ifconfig mwfd0 down
 ifconfig mwfd1 down
+ifconfig nan0 down
+ifconfig mnan0 down
 for (( i = 0; i <= 30; i++ ))
 do
     rmmod moal 2> /dev/null

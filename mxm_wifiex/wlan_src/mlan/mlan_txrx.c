@@ -4,7 +4,7 @@
  *  @brief This file contains the handling of TX/RX in MLAN
  *
  *
- *  Copyright 2009-2021 NXP
+ *  Copyright 2009-2021, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -109,7 +109,7 @@ t_u8 mcast_drv_update_allow_flag = MTRUE;
  *  @return         Nothing
  */
 static void wlan_drv_mcast_cycle_delay_calulation(pmlan_adapter pmadapter,
-					   pmlan_buffer pmbuf)
+						  pmlan_buffer pmbuf)
 {
 	static t_u32 prev_mcast_sec = 0;
 	static t_u32 prev_mcast_usec = 0;

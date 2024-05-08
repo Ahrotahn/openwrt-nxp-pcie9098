@@ -4,7 +4,7 @@
  *  @brief This file include miscellaneous functions for MLAN module
  *
  *
- *  Copyright 2009-2023 NXP
+ *  Copyright 2009-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -1679,7 +1679,8 @@ mlan_status wlan_reg_mem_ioctl_reg_rw(pmlan_adapter pmadapter,
 	case MLAN_REG_MAC:
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	case MLAN_REG_MAC2:
 #endif
 		cmd_no = HostCmd_CMD_MAC_REG_ACCESS;
@@ -1687,7 +1688,8 @@ mlan_status wlan_reg_mem_ioctl_reg_rw(pmlan_adapter pmadapter,
 	case MLAN_REG_BBP:
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	case MLAN_REG_BBP2:
 #endif
 		cmd_no = HostCmd_CMD_BBP_REG_ACCESS;
@@ -1695,7 +1697,8 @@ mlan_status wlan_reg_mem_ioctl_reg_rw(pmlan_adapter pmadapter,
 	case MLAN_REG_RF:
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	case MLAN_REG_RF2:
 #endif
 		cmd_no = HostCmd_CMD_RF_REG_ACCESS;
@@ -1709,15 +1712,17 @@ mlan_status wlan_reg_mem_ioctl_reg_rw(pmlan_adapter pmadapter,
 	case MLAN_REG_BCA:
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	case MLAN_REG_BCA2:
 #endif
 		cmd_no = HostCmd_CMD_BCA_REG_ACCESS;
 		break;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097) ||          \
-	defined(SD9177) || defined(SDIW615) || defined(USBIW615)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097) || defined(SD9177) ||             \
+	defined(SDIW615) || defined(USBIW615)
 	case MLAN_REG_CIU:
 		cmd_no = HostCmd_CMD_REG_ACCESS;
 		break;
@@ -3601,7 +3606,7 @@ mlan_status wlan_misc_multi_ap_cfg(pmlan_adapter pmadapter,
  *  @return        MTRUE/MFALSE
  */
 static t_u8 wlan_check_beacon_prot_supported(mlan_private *pmpriv,
-				      BSSDescriptor_t *pbss_desc)
+					     BSSDescriptor_t *pbss_desc)
 {
 	if (pbss_desc && pbss_desc->pext_cap) {
 		if (pbss_desc->pext_cap->ieee_hdr.len < 11)
@@ -4187,7 +4192,8 @@ mlan_status wlan_radio_ioctl_ant_cfg(pmlan_adapter pmadapter,
 		if (IS_STREAM_2X2(pmadapter->feature_control)) {
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 			if (IS_CARD9098(pmadapter->card_type) ||
 			    IS_CARD9097(pmadapter->card_type) ||
 			    IS_CARDAW693(pmadapter->card_type) ||
@@ -4236,7 +4242,8 @@ mlan_status wlan_radio_ioctl_ant_cfg(pmlan_adapter pmadapter,
 				ant_cfg->rx_antenna &= 0x0003;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 			}
 #endif
 			if (!ant_cfg->tx_antenna ||
@@ -4335,7 +4342,8 @@ mlan_status wlan_handle_antcfg(mlan_private *pmpriv, t_u32 init_antcfg)
 	if (IS_STREAM_2X2(pmadapter->feature_control)) {
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if (IS_CARD9098(pmadapter->card_type) ||
 		    IS_CARD9097(pmadapter->card_type) ||
 		    IS_CARDAW693(pmadapter->card_type) ||
@@ -4379,7 +4387,8 @@ mlan_status wlan_handle_antcfg(mlan_private *pmpriv, t_u32 init_antcfg)
 			ant_cfg.rx_antenna &= 0x0003;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		}
 #endif
 		if (!ant_cfg.tx_antenna ||

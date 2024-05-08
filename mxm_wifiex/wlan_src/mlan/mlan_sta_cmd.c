@@ -5,7 +5,7 @@
  *  it is ready.
  *
  *
- *  Copyright 2008-2023 NXP
+ *  Copyright 2008-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -406,9 +406,11 @@ static mlan_status wlan_cmd_mfg_tx_frame(pmlan_private pmpriv,
 		mcmd->short_preamble = wlan_cpu_to_le32(cfg->short_preamble);
 		mcmd->act_sub_ch = wlan_cpu_to_le32(cfg->act_sub_ch);
 		mcmd->short_gi = wlan_cpu_to_le32(cfg->short_gi);
+		mcmd->adv_coding = wlan_cpu_to_le32(cfg->adv_coding);
 		mcmd->tx_bf = wlan_cpu_to_le32(cfg->tx_bf);
 		mcmd->gf_mode = wlan_cpu_to_le32(cfg->gf_mode);
 		mcmd->stbc = wlan_cpu_to_le32(cfg->stbc);
+		mcmd->signal_bw = wlan_cpu_to_le32(cfg->signal_bw);
 		mcmd->NumPkt = wlan_cpu_to_le32(cfg->NumPkt);
 		mcmd->MaxPE = wlan_cpu_to_le32(cfg->MaxPE);
 		mcmd->BeamChange = wlan_cpu_to_le32(cfg->BeamChange);
@@ -484,8 +486,9 @@ static mlan_status wlan_cmd_mfg_config_trigger_frame(pmlan_private pmpriv,
  *  @return             MLAN_STATUS_SUCCESS
  */
 
-static mlan_status wlan_cmd_mfg_he_tb_tx(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
-				  t_u16 action, t_void *pdata_buf)
+static mlan_status wlan_cmd_mfg_he_tb_tx(pmlan_private pmpriv,
+					 HostCmd_DS_COMMAND *cmd, t_u16 action,
+					 t_void *pdata_buf)
 {
 	struct mfg_Cmd_HE_TBTx_t *mcmd =
 		(struct mfg_Cmd_HE_TBTx_t *)&cmd->params.mfg_he_power;
@@ -520,8 +523,9 @@ static mlan_status wlan_cmd_mfg_he_tb_tx(pmlan_private pmpriv, HostCmd_DS_COMMAN
  *  @return             MLAN_STATUS_SUCCESS
  */
 
-static mlan_status wlan_cmd_mfg_otp_rw(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
-				t_u16 action, t_void *pdata_buf)
+static mlan_status wlan_cmd_mfg_otp_rw(pmlan_private pmpriv,
+				       HostCmd_DS_COMMAND *cmd, t_u16 action,
+				       t_void *pdata_buf)
 {
 	mfg_cmd_otp_mac_addr_rd_wr_t *mcmd =
 		(mfg_cmd_otp_mac_addr_rd_wr_t *)&cmd->params
@@ -2961,8 +2965,8 @@ mlan_status wlan_cmd_arb_cfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
  */
 
 static mlan_status wlan_cmd_ipv6_ra_offload(mlan_private *pmpriv,
-				     HostCmd_DS_COMMAND *pcmd, t_u16 cmd_action,
-				     void *pdata_buf)
+					    HostCmd_DS_COMMAND *pcmd,
+					    t_u16 cmd_action, void *pdata_buf)
 {
 	HostCmd_DS_IPV6_RA_OFFLOAD *ipv6_ra_cfg = &pcmd->params.ipv6_ra_offload;
 	mlan_ds_misc_ipv6_ra_offload *ipv6_ra_offload =

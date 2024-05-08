@@ -47,7 +47,7 @@ Change log:
 #define PCIE_DEVICE_ID_88W9097 (0x2b56)
 #endif
 
-#if defined(PCIE9098)
+#if defined(PCIE9098) || defined(PCIEAW693)
 /** PCIE device ID for 9098 card FN0 */
 #define PCIE_DEVICE_ID_88W9098P_FN0 (0x2b43)
 /** PCIE device ID for 9098 card FN1 */
@@ -59,7 +59,7 @@ Change log:
 #define PCIE_DEVICE_ID_88WIW624 (0x3000)
 #endif
 
-#if defined(PCIE9098)
+#if defined(PCIE9098) || defined(PCIEAW693)
 /** PCIE device ID for AW693 card FN0 */
 #define PCIE_DEVICE_ID_88WAW693_FN0 (0x3003)
 /** PCIE device ID for AW693 card FN1 */
@@ -90,6 +90,12 @@ Change log:
 #define PCIE8897_DEFAULT_COMBO_FW_NAME "nxp/pcie8897_uapsta.bin"
 #define PCIE8897_DEFAULT_WLAN_FW_NAME "nxp/pcie8897_wlan.bin"
 #endif /* PCIE8897*/
+
+#ifdef PCIEAW693
+#define PCIEUARTAW693_DEFAULT_COMBO_FW_NAME "nxp/pcieuartaw693_combo.bin"
+#define PCIEAW693_DEFAULT_COMBO_FW_NAME "nxp/pcieuartaw693_combo.bin"
+#define PCIEAW693_DEFAULT_WLAN_FW_NAME "nxp/pcieaw693_wlan.bin"
+#endif /* PCIEAW693*/
 
 #ifdef PCIE9098
 #define PCIE9098_Z1Z2 0x00
@@ -131,7 +137,8 @@ Change log:
 #define PCIEIW624_DEFAULT_WLAN_FW_NAME "nxp/pcieiw624_wlan.bin"
 #endif /* PCIEIW624 */
 
-#if defined(PCIE9098) || defined(PCIE9097) || defined(PCIEIW624)
+#if defined(PCIE9098) || defined(PCIE9097) || defined(PCIEAW693) ||            \
+	defined(PCIEIW624)
 #define PCIE_NUM_MSIX_VECTORS 32
 #else
 #define PCIE_NUM_MSIX_VECTORS 4

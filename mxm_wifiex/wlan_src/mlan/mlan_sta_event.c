@@ -737,6 +737,7 @@ mlan_status wlan_ops_sta_process_event(t_void *priv)
 	ENTER();
 
 	if (!pmbuf) {
+		PRINTM(MERROR, "ERR:event buffer is null\n");
 		LEAVE();
 		return MLAN_STATUS_FAILURE;
 	}
@@ -744,6 +745,8 @@ mlan_status wlan_ops_sta_process_event(t_void *priv)
 	/* Event length check */
 	if ((pmbuf->data_len - sizeof(eventcause)) > MAX_EVENT_SIZE) {
 		pmbuf->status_code = MLAN_ERROR_PKT_SIZE_INVALID;
+		PRINTM(MERROR, "ERR:event buffer len invalid=%d\n",
+		       pmbuf->data_len);
 		LEAVE();
 		return MLAN_STATUS_FAILURE;
 	}
@@ -946,7 +949,7 @@ mlan_status wlan_ops_sta_process_event(t_void *priv)
 			(pmbuf->pbuf + pmbuf->data_offset + sizeof(eventcause));
 		memcpy_ext(pmpriv->adapter, pmpriv->assoc_req_buf, evt_buf,
 			   pmbuf->data_len - sizeof(eventcause),
-			   MRVDRV_ASSOC_RSP_BUF_SIZE);
+			   ASSOC_RSP_BUF_SIZE);
 		break;
 
 	case EVENT_FW_DEBUG_INFO:

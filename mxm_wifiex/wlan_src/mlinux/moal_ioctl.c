@@ -3,7 +3,7 @@
  * @brief This file contains ioctl function to MLAN
  *
  *
- * Copyright 2008-2023 NXP
+ * Copyright 2008-2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -1248,7 +1248,7 @@ mlan_status woal_bss_start(moal_private *priv, t_u8 wait_option,
 	mlan_ds_bss *bss = NULL;
 	mlan_status status;
 #ifdef UAP_SUPPORT
-	mlan_ssid_bssid temp_ssid_bssid;
+	mlan_ssid_bssid *temp_ssid_bssid = NULL;
 #endif
 
 	ENTER();
@@ -1264,12 +1264,20 @@ mlan_status woal_bss_start(moal_private *priv, t_u8 wait_option,
 		LEAVE();
 		return MLAN_STATUS_FAILURE;
 	}
-	moal_memcpy_ext(priv->phandle, &temp_ssid_bssid, ssid_bssid,
+	temp_ssid_bssid = kzalloc(sizeof(mlan_ssid_bssid), GFP_ATOMIC);
+	if (!temp_ssid_bssid) {
+		PRINTM(MERROR, "Fail to allocate ssid_bssid buffer\n");
+		LEAVE();
+		return MLAN_STATUS_FAILURE;
+	}
+
+	moal_memcpy_ext(priv->phandle, temp_ssid_bssid, ssid_bssid,
 			sizeof(mlan_ssid_bssid), sizeof(mlan_ssid_bssid));
 	if (MLAN_STATUS_SUCCESS ==
-	    woal_find_best_network(priv, wait_option, &temp_ssid_bssid))
+	    woal_find_best_network(priv, wait_option, temp_ssid_bssid))
 		woal_check_mc_connection(priv, wait_option,
-					 temp_ssid_bssid.channel);
+					 temp_ssid_bssid->channel);
+	kfree(temp_ssid_bssid);
 #endif
 
 	/* Allocate an IOCTL request buffer */
@@ -6608,7 +6616,7 @@ mlan_status woal_set_rssi_low_threshold(moal_private *priv, char *rssi,
 	priv->mrvl_rssi_low = low_rssi;
 #endif
 	misc->param.subscribe_event.low_rssi = low_rssi;
-	misc->param.subscribe_event.low_rssi_freq = 0;
+	misc->param.subscribe_event.low_rssi_freq = 1;
 	ret = woal_request_ioctl(priv, req, wait_option);
 	if (ret == MLAN_STATUS_FAILURE) {
 		PRINTM(MERROR, "request set rssi_low_threshold fail!\n");
@@ -6672,7 +6680,7 @@ mlan_status woal_set_rssi_threshold(moal_private *priv, t_u32 event_id,
 			SUBSCRIBE_EVT_ACT_BITWISE_SET;
 	misc->param.subscribe_event.evt_bitmap =
 		SUBSCRIBE_EVT_RSSI_LOW | SUBSCRIBE_EVT_RSSI_HIGH;
-	misc->param.subscribe_event.low_rssi_freq = 0;
+	misc->param.subscribe_event.low_rssi_freq = 1;
 	misc->param.subscribe_event.low_rssi = priv->last_rssi_low;
 	misc->param.subscribe_event.high_rssi_freq = 0;
 	misc->param.subscribe_event.high_rssi = priv->last_rssi_high;
@@ -8276,12 +8284,15 @@ static int parse_tx_pwr_string(moal_handle *handle, const char *s, size_t len,
 	/* tx power value */
 	pos = strsep(&string, " \t");
 	if (pow_conv && pos) {
-		/* for SH and later chipsets we need to convert user power vals
-		 * including -ve vals to 1/16dbm resolution*/
+		/* We need to convert user power vals including -ve vals to
+		 * 1/16dbm resolution*/
 		tx_pwr_local = woal_string_to_number(pos);
-		PowerLevelToDUT11Bits(tx_pwr_local, &tx_pwr_converted);
-		d->data1 = tx_pwr_converted;
-		pow_limit = 384;
+		if (tx_pwr_local != 0xffffffff) {
+			PowerLevelToDUT11Bits(tx_pwr_local, &tx_pwr_converted);
+			d->data1 = tx_pwr_converted;
+			pow_limit = 384;
+		} else
+			d->data1 = (t_u32)tx_pwr_local;
 	} else if (pos) {
 		d->data1 = (t_u32)woal_string_to_number(pos);
 	}
@@ -8665,6 +8676,10 @@ static int parse_tx_frame_string(const char *s, size_t len,
 	pos = strsep(&string, " \t");
 	if (pos)
 		d->stbc = (t_u32)woal_string_to_number(pos);
+
+	pos = strsep(&string, " \t");
+	if (pos)
+		d->signal_bw = (t_u32)woal_string_to_number(pos);
 
 	pos = strsep(&string, " \t");
 	if (pos)
@@ -9108,18 +9123,20 @@ mlan_status woal_process_rf_test_mode_cmd(moal_handle *handle, t_u32 cmd,
 		handle->rf_data->tx_frame_data[12] =
 			misc->param.mfg_tx_frame2.stbc;
 		handle->rf_data->tx_frame_data[13] =
-			misc->param.mfg_tx_frame2.NumPkt;
+			misc->param.mfg_tx_frame2.signal_bw;
 		handle->rf_data->tx_frame_data[14] =
-			misc->param.mfg_tx_frame2.MaxPE;
+			misc->param.mfg_tx_frame2.NumPkt;
 		handle->rf_data->tx_frame_data[15] =
-			misc->param.mfg_tx_frame2.BeamChange;
+			misc->param.mfg_tx_frame2.MaxPE;
 		handle->rf_data->tx_frame_data[16] =
-			misc->param.mfg_tx_frame2.Dcm;
+			misc->param.mfg_tx_frame2.BeamChange;
 		handle->rf_data->tx_frame_data[17] =
-			misc->param.mfg_tx_frame2.Doppler;
+			misc->param.mfg_tx_frame2.Dcm;
 		handle->rf_data->tx_frame_data[18] =
-			misc->param.mfg_tx_frame2.MidP;
+			misc->param.mfg_tx_frame2.Doppler;
 		handle->rf_data->tx_frame_data[19] =
+			misc->param.mfg_tx_frame2.MidP;
+		handle->rf_data->tx_frame_data[20] =
 			misc->param.mfg_tx_frame2.QNum;
 		for (i = 0; i < ETH_ALEN; i++) {
 			handle->rf_data->bssid[i] =

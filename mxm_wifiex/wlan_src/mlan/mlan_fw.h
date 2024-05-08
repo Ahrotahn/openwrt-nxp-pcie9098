@@ -1352,9 +1352,10 @@ typedef MLAN_PACK_START struct _MrvlIEtypes_He_Op_t {
 #define IS_FW_SUPPORT_EMBEDDED_OWE(_adapter)                                   \
 	(_adapter->fw_cap_info & FW_CAPINFO_EMBEDDED_OWE_SUPPORT)
 
-#if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
-	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+#if defined(PCIE9098) || defined(SDAW693) || defined(SD9098) ||                \
+	defined(USB9098) || defined(PCIE9097) || defined(USB9097) ||           \
+	defined(SDIW624) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 /* TLV type: reg type */
 #define TLV_TYPE_REG_ACCESS_CTRL (PROPRIETARY_TLV_BASE_ID + 0x13C) /* 0x023c*/
 /** MrvlIEtypes_Reg_type_t*/
@@ -1445,6 +1446,8 @@ typedef enum _ENH_PS_MODES {
 #define HostCmd_ACT_GEN_GET 0x0000
 /** General purpose action : Set */
 #define HostCmd_ACT_GEN_SET 0x0001
+/** Special purpose action : Set */
+#define HostCmd_ACT_SPC_SET 0x8001
 /** General purpose action : Set Default */
 #define HostCmd_ACT_GEN_SET_DEFAULT 0x0002
 /** General purpose action : Get_Current */
@@ -4453,7 +4456,7 @@ typedef MLAN_PACK_START struct _HostCmd_DS_802_11_SCAN_RSP {
 	/** Numner of sets */
 	t_u8 number_of_sets;
 	/** BSS descriptor and TLV buffer */
-	t_u8 bss_desc_and_tlv_buffer[1];
+	t_u8 bss_desc_and_tlv_buffer[];
 } MLAN_PACK_END HostCmd_DS_802_11_SCAN_RSP;
 
 /** HostCmd_DS_802_11_BG_SCAN_CONFIG */
@@ -4754,6 +4757,22 @@ typedef MLAN_PACK_START struct _hostcmd_twt_report {
 	/** TWT report payload for FW response to fill */
 	t_u8 data[36];
 } MLAN_PACK_END hostcmd_twt_report, *phostcmd_twt_report;
+
+/** Type definition of hostcmd_twt_teardown */
+typedef struct MLAN_PACK_START _hostcmd_twt_information {
+	/** TWT Flow Identifier. Range: [0-7] */
+	t_u8 flow_identifier;
+	/** Suspend Duration. Range: [0-UINT32_MAX]
+	 * 0:Suspend forever;
+	 * Else:Suspend agreement for specific duration in milli seconds,
+	 * 		after than resume the agreement and enter SP immediately
+	 */
+	t_u32 suspend_duration;
+	/** TWT Information State. Set to 0 by driver, filled by FW in response
+	 */
+	t_u8 twt_information_state;
+} MLAN_PACK_END hostcmd_twt_information, *phostcmd_twt_information;
+
 /** HostCmd_DS_TWT_CFG */
 typedef MLAN_PACK_START struct _HostCmd_DS_TWT_CFG {
 	/** Action */
@@ -4769,6 +4788,10 @@ typedef MLAN_PACK_START struct _HostCmd_DS_TWT_CFG {
 		hostcmd_twt_teardown twt_teardown;
 		/** TWT report for Sub ID: MLAN_11AX_TWT_REPORT_SUBID */
 		hostcmd_twt_report twt_report;
+		/** TWT Information config for Sub ID:
+		 * MLAN_11AX_TWT_INFORMATION_SUBID
+		 */
+		hostcmd_twt_information twt_information;
 	} param;
 } MLAN_PACK_END HostCmd_DS_TWT_CFG;
 
@@ -6441,7 +6464,7 @@ typedef MLAN_PACK_START struct _MrvlTypes_DrcsTimeSlice_t {
 	/** Channel swith time (in TU) for chan_idx*/
 	t_u8 switchtime;
 	/** Undoze time (in TU) for chan_idx*/
-	t_u8 undozetime;
+	t_u8 rx_wait_time;
 	/** Rx traffic control scheme when channel switch*/
 	/** only valid for GC/STA interface*/
 	t_u8 mode;

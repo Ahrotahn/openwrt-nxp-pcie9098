@@ -966,6 +966,17 @@ wlan_scan_channel_list(mlan_private *pmpriv, t_void *pioctl_buf,
 			if (pmadapter->ext_scan && pmadapter->ext_scan_enh &&
 			    pmadapter->ext_scan_type == EXT_SCAN_ENHANCE)
 				done_early = MFALSE;
+
+			/*
+			 * Stop the loop if the *next* channel is of different
+			 * Band
+			 */
+			// coverity[overflow_sink:SUPPRESS]
+			if (ptmp_chan_list->bandcfg.chanBand !=
+			    ((ChanScanParamSet_t *)(ptmp_chan_list - 1))
+				    ->bandcfg.chanBand) {
+				done_early = MTRUE;
+			}
 		}
 
 		/* The total scan time should be less than scan command timeout
@@ -1025,9 +1036,11 @@ wlan_scan_channel_list(mlan_private *pmpriv, t_void *pioctl_buf,
 		if (IS_FW_SUPPORT_11AX(pmadapter) &&
 		    ((pmpriv->config_bands & BAND_GAX) ||
 		     (pmpriv->config_bands & BAND_AAX))) {
+			t_u16 select_band =
+				(radio_type == BAND_5GHZ ? BAND_AAX : BAND_GAX);
 			phe_cap = (MrvlIEtypes_Extension_t *)ptlv_pos;
-			len = wlan_fill_he_cap_tlv(pmpriv, pmpriv->config_bands,
-						   phe_cap, MFALSE);
+			len = wlan_fill_he_cap_tlv(pmpriv, select_band, phe_cap,
+						   MFALSE);
 			HEXDUMP("SCAN: HE_CAPABILITIES IE", (t_u8 *)phe_cap,
 				len);
 			ptlv_pos += len;
@@ -5181,7 +5194,8 @@ done:
 static mlan_status wlan_update_ssid_in_beacon_buf(
 	mlan_adapter *pmadapter, BSSDescriptor_t *pbss_entry,
 	BSSDescriptor_t *pnew_entry, IEEEtypes_Ssid_t *pssid,
-	IEEEtypes_ExtCap_t *pnew_extcap, IEEEtypes_Generic_t *pnew_rsnx)
+	IEEEtypes_ExtCap_t *pnew_extcap, IEEEtypes_Generic_t *pnew_rsnx,
+	IEEEtypes_Generic_t *pnew_rsn)
 {
 	mlan_callbacks *pcb = (pmlan_callbacks)&pmadapter->callbacks;
 	t_u8 *pbeacon_buf = MNULL;
@@ -5189,7 +5203,7 @@ static mlan_status wlan_update_ssid_in_beacon_buf(
 	t_s8 offset = pnew_entry->ssid.ssid_len - pbss_entry->ssid.ssid_len;
 	IEEEtypes_ExtCap_t *pextcap;
 	mlan_status ret = MLAN_STATUS_FAILURE;
-	t_u32 rsnx_offset = 0;
+	t_u32 rsnx_offset = 0, rsn_offset = 0;
 
 	if (pnew_entry->ssid.ssid_len >= pbss_entry->ssid.ssid_len)
 		beacon_buf_size =
@@ -5204,6 +5218,11 @@ static mlan_status wlan_update_ssid_in_beacon_buf(
 	if (pnew_rsnx)
 		beacon_buf_size +=
 			pnew_rsnx->ieee_hdr.len + sizeof(IEEEtypes_Header_t);
+
+	rsn_offset = beacon_buf_size;
+	if (pnew_rsn)
+		beacon_buf_size +=
+			pnew_rsn->ieee_hdr.len + sizeof(IEEEtypes_Header_t);
 
 	ret = pcb->moal_malloc(pmadapter->pmoal_handle, beacon_buf_size,
 			       MLAN_MEM_DEF, (t_u8 **)&pbeacon_buf);
@@ -5293,6 +5312,11 @@ static mlan_status wlan_update_ssid_in_beacon_buf(
 			pmadapter, pbeacon_buf + rsnx_offset, (t_u8 *)pnew_rsnx,
 			pnew_rsnx->ieee_hdr.len + sizeof(IEEEtypes_Header_t),
 			pnew_rsnx->ieee_hdr.len + sizeof(IEEEtypes_Header_t));
+	if (pnew_rsn)
+		memcpy_ext(pmadapter, pbeacon_buf + rsn_offset,
+			   (t_u8 *)pnew_rsn,
+			   pnew_rsn->ieee_hdr.len + sizeof(IEEEtypes_Header_t),
+			   pnew_rsn->ieee_hdr.len + sizeof(IEEEtypes_Header_t));
 	DBG_HEXDUMP(MCMD_D, "MBSSID beacon buf", pbeacon_buf, beacon_buf_size);
 	ret = MLAN_STATUS_SUCCESS;
 done:
@@ -5361,6 +5385,7 @@ static t_void wlan_parse_non_trans_bssid_profile(
 		(IEEEtypes_Header_t *)pbss_profile->profile_data;
 	IEEEtypes_MultiBSSIDIndex_t *pbssid_index = MNULL;
 	IEEEtypes_Ssid_t *pssid = MNULL;
+	IEEEtypes_Generic_t *prsn = MNULL;
 	IEEEtypes_NotxBssCap_t *pcap =
 		(IEEEtypes_NotxBssCap_t *)pbss_profile->profile_data;
 	t_u8 *pos = pbss_profile->profile_data;
@@ -5418,6 +5443,12 @@ static t_void wlan_parse_non_trans_bssid_profile(
 				    prsnx->ieee_hdr.len +
 					    sizeof(IEEEtypes_Header_t));
 			break;
+		case RSN_IE:
+			prsn = (IEEEtypes_Generic_t *)pos;
+			DBG_HEXDUMP(MCMD_D, "MBSSID RSN", pos,
+				    prsn->ieee_hdr.len +
+					    sizeof(IEEEtypes_Header_t));
+			break;
 		case SSID:
 			pssid = (IEEEtypes_Ssid_t *)pos;
 			PRINTM(MCMND, "MBSSID: Find mbssid ssid=%s\n",
@@ -5454,7 +5485,7 @@ static t_void wlan_parse_non_trans_bssid_profile(
 			if (MLAN_STATUS_SUCCESS !=
 			    wlan_update_ssid_in_beacon_buf(
 				    pmadapter, pbss_entry, bss_new_entry, pssid,
-				    pextcap, prsnx)) {
+				    pextcap, prsnx, prsn)) {
 				PRINTM(MERROR,
 				       "Fail to update MBSSID beacon buf\n");
 				pcb->moal_mfree(pmadapter->pmoal_handle,

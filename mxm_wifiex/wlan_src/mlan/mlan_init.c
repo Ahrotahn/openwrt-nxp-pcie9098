@@ -976,7 +976,8 @@ t_void wlan_init_adapter(pmlan_adapter pmadapter)
 				EVT_RW_PTR_ROLLOVER_IND;
 		}
 #endif
-#if defined(PCIE9098) || defined(PCIE9097) || defined(PCIEIW624)
+#if defined(PCIE9098) || defined(PCIE9097) || defined(PCIEAW693) ||            \
+	defined(PCIEIW624)
 		if (pmadapter->pcard_pcie->reg->use_adma) {
 			pmadapter->pcard_pcie->rxbd_wrptr =
 				pmadapter->pcard_pcie->txrx_bd_size;
@@ -1187,6 +1188,9 @@ mlan_status wlan_init_lock_list(pmlan_adapter pmadapter)
 	util_init_list_head((t_void *)pmadapter->pmoal_handle,
 			    &pmadapter->rx_data_queue, MTRUE,
 			    pmadapter->callbacks.moal_init_lock);
+	util_init_list_head((t_void *)pmadapter->pmoal_handle,
+			    &pmadapter->amsdu_txq, MTRUE,
+			    pmadapter->callbacks.moal_init_lock);
 	util_scalar_init((t_void *)pmadapter->pmoal_handle,
 			 &pmadapter->bypass_pkt_count, 0, MNULL,
 			 pmadapter->callbacks.moal_init_lock);
@@ -1300,6 +1304,8 @@ t_void wlan_free_lock_list(pmlan_adapter pmadapter)
 	/* Free lists */
 	util_free_list_head((t_void *)pmadapter->pmoal_handle,
 			    &pmadapter->rx_data_queue, pcb->moal_free_lock);
+	util_free_list_head((t_void *)pmadapter->pmoal_handle,
+			    &pmadapter->amsdu_txq, pcb->moal_free_lock);
 
 	util_scalar_free((t_void *)pmadapter->pmoal_handle,
 			 &pmadapter->bypass_pkt_count, pcb->moal_free_lock);

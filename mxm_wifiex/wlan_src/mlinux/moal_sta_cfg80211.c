@@ -3,7 +3,7 @@
  * @brief This file contains the functions for STA CFG80211.
  *
  *
- * Copyright 2011-2023 NXP
+ * Copyright 2011-2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -2603,7 +2603,7 @@ void woal_host_mlme_process_assoc_resp(moal_private *priv,
 	struct cfg80211_bss *bss = NULL;
 	unsigned long flags;
 	u8 *assoc_req_buf = NULL;
-#if ((CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)) || IMX_ANDROID_14)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 	struct cfg80211_rx_assoc_resp_data resp = {
 		.uapsd_queues = -1,
 	};
@@ -2671,7 +2671,7 @@ void woal_host_mlme_process_assoc_resp(moal_private *priv,
 					resp.req_ies = assoc_req_buf;
 					resp.req_ies_len =
 						assoc_info->assoc_req_len;
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 					wiphy_lock(priv->wdev->wiphy);
 					cfg80211_rx_assoc_resp(priv->netdev,
 							       &resp);
@@ -2738,9 +2738,16 @@ static void woal_assoc_resp_event(moal_private *priv,
 	struct woal_event *evt;
 	unsigned long flags;
 	moal_handle *handle = priv->phandle;
-	mlan_ds_misc_assoc_req assoc_req;
-	memset(&assoc_req, 0, sizeof(mlan_ds_misc_assoc_req));
-	woal_get_assoc_req(priv, &assoc_req, MOAL_IOCTL_WAIT);
+	mlan_ds_misc_assoc_req *assoc_req = NULL;
+
+	assoc_req = kzalloc(sizeof(mlan_ds_misc_assoc_req), GFP_ATOMIC);
+	if (!assoc_req) {
+		PRINTM(MERROR,
+		       "Fail to allocate mlan_ds_misc_assoc_req buffer\n");
+		return;
+	}
+
+	woal_get_assoc_req(priv, assoc_req, MOAL_IOCTL_WAIT);
 
 	evt = kzalloc(sizeof(struct woal_event), GFP_ATOMIC);
 	if (evt) {
@@ -2752,10 +2759,10 @@ static void woal_assoc_resp_event(moal_private *priv,
 		evt->assoc_info.assoc_resp_len =
 			MIN(passoc_rsp->assoc_resp_len, ASSOC_RSP_BUF_SIZE);
 		moal_memcpy_ext(priv->phandle, evt->assoc_info.assoc_req_buf,
-				assoc_req.assoc_req_buf,
-				assoc_req.assoc_req_len, ASSOC_RSP_BUF_SIZE);
+				assoc_req->assoc_req_buf,
+				assoc_req->assoc_req_len, ASSOC_RSP_BUF_SIZE);
 		evt->assoc_info.assoc_req_len =
-			MIN(assoc_req.assoc_req_len, ASSOC_RSP_BUF_SIZE);
+			MIN(assoc_req->assoc_req_len, ASSOC_RSP_BUF_SIZE);
 
 		INIT_LIST_HEAD(&evt->link);
 		spin_lock_irqsave(&handle->evt_lock, flags);
@@ -2763,6 +2770,9 @@ static void woal_assoc_resp_event(moal_private *priv,
 		spin_unlock_irqrestore(&handle->evt_lock, flags);
 		queue_work(handle->evt_workqueue, &handle->evt_work);
 	}
+	kfree(assoc_req);
+	// coverity[leaked_storage:SUPPRESS]
+	return;
 }
 
 /**
@@ -3701,7 +3711,7 @@ static int compare(const void *lhs, const void *rhs)
  *  @return                 N/A
  */
 static t_u32 woal_get_chan_rule_flags(mlan_ds_custom_reg_domain *custom_reg,
-			       t_u8 channel)
+				      t_u8 channel)
 {
 	t_u16 num_chan = 0;
 	t_u32 flags = 0;
@@ -5145,7 +5155,7 @@ static int woal_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 	unsigned long flags;
 	mlan_ds_misc_assoc_rsp *assoc_rsp = NULL;
 	IEEEtypes_AssocRsp_t *passoc_rsp = NULL;
-	mlan_ds_misc_assoc_req assoc_req;
+	mlan_ds_misc_assoc_req *assoc_req = NULL;
 
 	mlan_ssid_bssid *ssid_bssid = NULL;
 	moal_handle *handle = priv->phandle;
@@ -5298,8 +5308,9 @@ static int woal_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 			priv->ft_md = 0;
 			priv->ft_cap = 0;
 		}
-		memset(&assoc_req, 0, sizeof(mlan_ds_misc_assoc_req));
-		woal_get_assoc_req(priv, &assoc_req, MOAL_IOCTL_WAIT);
+		assoc_req = kzalloc(sizeof(mlan_ds_misc_assoc_req), GFP_ATOMIC);
+		if (assoc_req)
+			woal_get_assoc_req(priv, assoc_req, MOAL_IOCTL_WAIT);
 	}
 	spin_lock_irqsave(&priv->connect_lock, flags);
 	priv->cfg_connect = MFALSE;
@@ -5309,8 +5320,8 @@ static int woal_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 		       MAC2STR(priv->cfg_bssid));
 		spin_unlock_irqrestore(&priv->connect_lock, flags);
 		cfg80211_connect_result(
-			priv->netdev, priv->cfg_bssid, assoc_req.assoc_req_buf,
-			assoc_req.assoc_req_len, passoc_rsp->ie_buffer,
+			priv->netdev, priv->cfg_bssid, assoc_req->assoc_req_buf,
+			assoc_req->assoc_req_len, passoc_rsp->ie_buffer,
 			assoc_rsp->assoc_resp_len - ASSOC_RESP_FIXED_SIZE,
 			WLAN_STATUS_SUCCESS, GFP_KERNEL);
 	} else {
@@ -5323,6 +5334,7 @@ static int woal_cfg80211_connect(struct wiphy *wiphy, struct net_device *dev,
 					GFP_KERNEL);
 	}
 	kfree(ssid_bssid);
+	kfree(assoc_req);
 	kfree(assoc_rsp);
 	assoc_rsp = NULL;
 	LEAVE();
@@ -5559,7 +5571,9 @@ static int woal_cfg80211_disassociate(struct wiphy *wiphy,
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	if (priv->host_mlme) {
 		priv->delay_deauth_notify = MTRUE;
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 0, 0)
+#if (CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 0, 0) ||                       \
+     (defined(ANDROID_SDK_VERSION) && ANDROID_SDK_VERSION >= 33 &&             \
+      CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 74)))
 		moal_memcpy_ext(priv->phandle, priv->bssid_notify, req->ap_addr,
 				MLAN_MAC_ADDR_LENGTH, MLAN_MAC_ADDR_LENGTH);
 #else
@@ -9661,7 +9675,7 @@ void woal_host_mlme_disconnect(moal_private *priv, u16 reason_code, u8 *sa)
 	}
 
 	if (GET_BSS_ROLE(priv) != MLAN_BSS_ROLE_UAP) {
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 		wiphy_lock(priv->wdev->wiphy);
 		cfg80211_rx_mlme_mgmt(priv->netdev, frame_buf, 26);
 		wiphy_unlock(priv->wdev->wiphy);

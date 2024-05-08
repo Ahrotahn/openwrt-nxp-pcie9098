@@ -4,7 +4,7 @@
  *  @brief This file contains the handling of CMD/EVENT in MLAN
  *
  *
- *  Copyright 2009-2023 NXP
+ *  Copyright 2009-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -740,9 +740,7 @@ static t_u8 *wlan_strchr(t_u8 *s, int c)
 	while (*pos != '\0') {
 		if (*pos == (t_u8)c)
 			return pos;
-		if (!wlan_secure_add(pos, 1, pos, TYPE_PTR)) {
-			PRINTM(MERROR, "pos is invalid\n");
-		}
+		pos++;
 	}
 	return MNULL;
 }
@@ -1359,6 +1357,11 @@ static mlan_status wlan_dnld_cmd_to_fw(mlan_private *pmpriv,
 
 	if (pcmd->command == HostCmd_CMD_802_11_SCAN_EXT)
 		pmadapter->scan_state |= wlan_get_ext_scan_state(pcmd);
+	if (pmpriv->bss_mode == MLAN_BSS_MODE_INFRA &&
+	    pmpriv->media_connected &&
+	    (pcmd->command == HostCmd_CMD_802_11_DEAUTHENTICATE ||
+	     pcmd->command == HostCmd_CMD_802_11_DISASSOCIATE))
+		wlan_clean_txrx(pmpriv);
 
 	if (pmpriv->bss_mode == MLAN_BSS_MODE_INFRA &&
 	    pmpriv->media_connected &&
@@ -2211,7 +2214,8 @@ done:
  *
  *  @return             N/A
  */
-static void wlan_handle_cmd_error_in_pre_aleep(mlan_adapter *pmadapter, t_u16 cmd_no)
+static void wlan_handle_cmd_error_in_pre_aleep(mlan_adapter *pmadapter,
+					       t_u16 cmd_no)
 {
 	cmd_ctrl_node *pcmd_node = MNULL;
 	ENTER();
@@ -2444,7 +2448,8 @@ mlan_status wlan_process_cmdresp(mlan_adapter *pmadapter)
 		if (IS_PCIE(pmadapter->card_type) &&
 		    cmdresp_no == HostCmd_CMD_FUNC_SHUTDOWN &&
 		    pmadapter->pwarm_reset_ioctl_req) {
-#if defined(PCIE9098) || defined(PCIE9097) || defined(PCIEIW624)
+#if defined(PCIE9098) || defined(PCIE9097) || defined(PCIEAW693) ||            \
+	defined(PCIEIW624)
 			if (pmadapter->pcard_pcie->reg->use_adma)
 #endif
 				wlan_pcie_init_fw(pmadapter);
@@ -2994,8 +2999,9 @@ t_void wlan_cancel_pending_ioctl(pmlan_adapter pmadapter,
  *
  *  @return           N/A
  */
-static t_void wlan_fill_hal_wifi_rate(pmlan_private pmpriv, mlan_wifi_rate *pmlan_rate,
-			       wifi_rate *prate)
+static t_void wlan_fill_hal_wifi_rate(pmlan_private pmpriv,
+				      mlan_wifi_rate *pmlan_rate,
+				      wifi_rate *prate)
 {
 	t_u8 index = 0;
 	t_u8 rate_info = 0;
@@ -5159,7 +5165,7 @@ mlan_status wlan_adapter_init_cmd(pmlan_adapter pmadapter)
 			(t_u8)(pmadapter->init_para.drcs_chantime_mode >> 8);
 		/* switchtime use default value in fw*/
 		drcs_init_cfg[0].switchtime = 10;
-		drcs_init_cfg[0].undozetime = 5;
+		drcs_init_cfg[0].rx_wait_time = 5;
 		drcs_init_cfg[0].mode =
 			(t_u8)(pmadapter->init_para.drcs_chantime_mode);
 		drcs_init_cfg[1].chan_idx = 0x2;
@@ -5167,7 +5173,7 @@ mlan_status wlan_adapter_init_cmd(pmlan_adapter pmadapter)
 			(t_u8)(pmadapter->init_para.drcs_chantime_mode >> 24);
 		/* switchtime use default value in fw*/
 		drcs_init_cfg[1].switchtime = 10;
-		drcs_init_cfg[1].undozetime = 5;
+		drcs_init_cfg[1].rx_wait_time = 5;
 		drcs_init_cfg[1].mode =
 			(t_u8)(pmadapter->init_para.drcs_chantime_mode >> 16);
 		ret = wlan_prepare_cmd(pmpriv, HostCmd_CMD_DRCS_CONFIG,
@@ -5830,14 +5836,14 @@ mlan_status wlan_cmd_drcs_cfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 			wlan_cpu_to_le16(drcs_cfg->chan_idx);
 		channel_time_slicing->chantime = drcs_cfg->chantime;
 		channel_time_slicing->switchtime = drcs_cfg->switchtime;
-		channel_time_slicing->undozetime = drcs_cfg->undozetime;
+		channel_time_slicing->rx_wait_time = drcs_cfg->rx_wait_time;
 		channel_time_slicing->mode = drcs_cfg->mode;
 		PRINTM(MCMND,
-		       "Set multi-channel: chan_idx=%d chantime=%d switchtime=%d undozetime=%d mode=%d\n",
+		       "Set multi-channel: chan_idx=%d chantime=%d switchtime=%d rx_wait_time=%d mode=%d\n",
 		       channel_time_slicing->chan_idx,
 		       channel_time_slicing->chantime,
 		       channel_time_slicing->switchtime,
-		       channel_time_slicing->undozetime,
+		       channel_time_slicing->rx_wait_time,
 		       channel_time_slicing->mode);
 		cmd->size = wlan_cpu_to_le16(S_DS_GEN +
 					     sizeof(HostCmd_DS_DRCS_CFG));
@@ -5854,14 +5860,16 @@ mlan_status wlan_cmd_drcs_cfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 				wlan_cpu_to_le16(drcs_cfg->chan_idx);
 			channel_time_slicing->chantime = drcs_cfg->chantime;
 			channel_time_slicing->switchtime = drcs_cfg->switchtime;
-			channel_time_slicing->undozetime = drcs_cfg->undozetime;
+			// coverity[overflow_sink:SUPPRESS]
+			channel_time_slicing->rx_wait_time =
+				drcs_cfg->rx_wait_time;
 			channel_time_slicing->mode = drcs_cfg->mode;
 			PRINTM(MCMND,
-			       "Set multi-channel: chan_idx=%d chantime=%d switchtime=%d undozetime=%d mode=%d\n",
+			       "Set multi-channel: chan_idx=%d chantime=%d switchtime=%d rx_wait_time=%d mode=%d\n",
 			       channel_time_slicing->chan_idx,
 			       channel_time_slicing->chantime,
 			       channel_time_slicing->switchtime,
-			       channel_time_slicing->undozetime,
+			       channel_time_slicing->rx_wait_time,
 			       channel_time_slicing->mode);
 			cmd->size += wlan_cpu_to_le16(
 				sizeof(MrvlTypes_DrcsTimeSlice_t));
@@ -5912,15 +5920,15 @@ mlan_status wlan_ret_drcs_cfg(pmlan_private pmpriv,
 			channel_time_slicing->chantime;
 		pcfg->param.drcs_cfg[0].switchtime =
 			channel_time_slicing->switchtime;
-		pcfg->param.drcs_cfg[0].undozetime =
-			channel_time_slicing->undozetime;
+		pcfg->param.drcs_cfg[0].rx_wait_time =
+			channel_time_slicing->rx_wait_time;
 		pcfg->param.drcs_cfg[0].mode = channel_time_slicing->mode;
 		PRINTM(MCMND,
-		       "multi-channel: chan_idx=%d chantime=%d switchtime=%d undozetime=%d mode=%d\n",
+		       "multi-channel: chan_idx=%d chantime=%d switchtime=%d rx_wait_time=%d mode=%d\n",
 		       pcfg->param.drcs_cfg[0].chan_idx,
 		       channel_time_slicing->chantime,
 		       channel_time_slicing->switchtime,
-		       channel_time_slicing->undozetime,
+		       channel_time_slicing->rx_wait_time,
 		       channel_time_slicing->mode);
 		pioctl_buf->buf_len = sizeof(mlan_ds_drcs_cfg);
 		/*Channel for chan_idx 1 and 2 have different parameters*/
@@ -5943,13 +5951,13 @@ mlan_status wlan_ret_drcs_cfg(pmlan_private pmpriv,
 			drcs_cfg1->chantime = channel_time_slicing1->chantime;
 			drcs_cfg1->switchtime =
 				channel_time_slicing1->switchtime;
-			drcs_cfg1->undozetime =
-				channel_time_slicing1->undozetime;
+			drcs_cfg1->rx_wait_time =
+				channel_time_slicing1->rx_wait_time;
 			drcs_cfg1->mode = channel_time_slicing1->mode;
 			PRINTM(MCMND,
-			       "multi-channel: chan_idx=%d chantime=%d switchtime=%d undozetime=%d mode=%d\n",
+			       "multi-channel: chan_idx=%d chantime=%d switchtime=%d rx_wait_time=%d mode=%d\n",
 			       drcs_cfg1->chan_idx, drcs_cfg1->chantime,
-			       drcs_cfg1->switchtime, drcs_cfg1->undozetime,
+			       drcs_cfg1->switchtime, drcs_cfg1->rx_wait_time,
 			       drcs_cfg1->mode);
 			pioctl_buf->buf_len += sizeof(mlan_ds_drcs_cfg);
 		}
@@ -6309,7 +6317,8 @@ mlan_status wlan_ret_get_hw_spec(pmlan_private pmpriv, HostCmd_DS_COMMAND *resp,
 	wlan_show_devmcssupport(pmadapter, pmadapter->hw_dev_mcs_support);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	pmadapter->user_htstream = pmadapter->hw_dev_mcs_support;
 	/** separate stream config for 2.4G and 5G, will be changed according to
 	 * antenna cfg*/
@@ -7486,7 +7495,8 @@ mlan_status wlan_ret_802_11_rf_antenna(pmlan_private pmpriv,
 	t_u16 rx_ant_mode = wlan_le16_to_cpu(pantenna->rx_antenna_mode);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	mlan_adapter *pmadapter = pmpriv->adapter;
 #endif
 	typedef struct _HostCmd_DS_802_11_RF_ANTENNA_1X1 {
@@ -7516,7 +7526,8 @@ mlan_status wlan_ret_802_11_rf_antenna(pmlan_private pmpriv,
 		       wlan_le16_to_cpu(pantenna->action_rx), rx_ant_mode);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(SD9097) || defined(USB9097) ||            \
-	defined(SDIW624) || defined(PCIEIW624) || defined(USBIW624)
+	defined(SDIW624) || defined(SDAW693) || defined(PCIEAW693) ||          \
+	defined(PCIEIW624) || defined(USBIW624)
 		if (IS_CARD9098(pmadapter->card_type) ||
 		    IS_CARDIW624(pmadapter->card_type) ||
 		    IS_CARDAW693(pmadapter->card_type) ||
@@ -7591,7 +7602,8 @@ mlan_status wlan_cmd_reg_access(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 	mlan_ds_reg_rw *reg_rw;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	MrvlIEtypes_Reg_type_t *tlv;
 	mlan_adapter *pmadapter = pmpriv->adapter;
 #endif
@@ -7610,7 +7622,8 @@ mlan_status wlan_cmd_reg_access(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		mac_reg->value = wlan_cpu_to_le32(reg_rw->value);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if ((reg_rw->type == MLAN_REG_MAC2) &&
 		    (IS_CARD9098(pmadapter->card_type) ||
 		     IS_CARDIW624(pmadapter->card_type) ||
@@ -7652,7 +7665,8 @@ mlan_status wlan_cmd_reg_access(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		bbp_reg->value = (t_u8)reg_rw->value;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if ((reg_rw->type == MLAN_REG_BBP2) &&
 		    (IS_CARD9098(pmadapter->card_type) ||
 		     IS_CARDIW624(pmadapter->card_type) ||
@@ -7683,7 +7697,8 @@ mlan_status wlan_cmd_reg_access(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		rf_reg->value = (t_u8)reg_rw->value;
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if ((reg_rw->type == MLAN_REG_RF2) &&
 		    (IS_CARD9098(pmadapter->card_type) ||
 		     IS_CARDIW624(pmadapter->card_type) ||
@@ -7749,7 +7764,8 @@ mlan_status wlan_cmd_reg_access(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		bca_reg->value = wlan_cpu_to_le32(reg_rw->value);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 		if ((reg_rw->type == MLAN_REG_BCA2) &&
 		    (IS_CARD9098(pmadapter->card_type) ||
 		     IS_CARDIW624(pmadapter->card_type) ||

@@ -325,6 +325,7 @@ mlan_status mlan_register(pmlan_device pmdevice, t_void **ppmlan_adapter)
 	pmadapter->card_type = pmdevice->card_type;
 	pmadapter->card_rev = pmdevice->card_rev;
 	pmadapter->init_para.uap_max_sta = pmdevice->uap_max_sta;
+	pmadapter->init_para.wacp_mode = pmdevice->wacp_mode;
 	pmadapter->init_para.mcs32 = pmdevice->mcs32;
 	pmadapter->init_para.antcfg = pmdevice->antcfg;
 	pmadapter->init_para.dmcs = pmdevice->dmcs;
@@ -1040,6 +1041,8 @@ mlan_status mlan_rx_process(t_void *padapter, t_u8 *rx_pkts)
 	pcb->moal_spin_lock(pmadapter->pmoal_handle, pmadapter->prx_proc_lock);
 	if (pmadapter->mlan_rx_processing || pmadapter->rx_lock_flag) {
 		pmadapter->more_rx_task_flag = MTRUE;
+		if (rx_pkts)
+			*rx_pkts = 0;
 		pcb->moal_spin_unlock(pmadapter->pmoal_handle,
 				      pmadapter->prx_proc_lock);
 		goto exit_rx_proc;
@@ -1091,14 +1094,16 @@ rx_process_start:
 			goto rx_process_start;
 		}
 
-		if (pmadapter->delay_task_flag &&
+		if (!IS_PCIE(pmadapter->card_type) &&
+		    pmadapter->delay_task_flag &&
 		    (pmadapter->rx_pkts_queued < LOW_RX_PENDING)) {
 			PRINTM(MEVENT, "Run\n");
 			pmadapter->delay_task_flag = MFALSE;
 			mlan_queue_main_work(pmadapter);
 		}
 #ifdef PCIE
-		if (pmadapter->delay_rx_data_flag &&
+		if (IS_PCIE(pmadapter->card_type) &&
+		    pmadapter->delay_rx_data_flag &&
 		    (pmadapter->rx_pkts_queued < LOW_RX_PENDING)) {
 			PRINTM(MEVENT, "Run\n");
 			pmadapter->delay_rx_data_flag = MFALSE;
@@ -1179,7 +1184,7 @@ process_start:
 			pmadapter->pending_disconnect_priv = MNULL;
 		}
 #if defined(SDIO)
-		if (!IS_USB(pmadapter->card_type)) {
+		if (IS_SD(pmadapter->card_type)) {
 			if (pmadapter->rx_pkts_queued > HIGH_RX_PENDING) {
 				pcb->moal_tp_accounting_rx_param(
 					pmadapter->pmoal_handle, 2, 0);
@@ -1457,13 +1462,23 @@ mlan_status mlan_send_packet(t_void *padapter, pmlan_buffer pmbuf)
 		mlan_ntohs(*(t_u16 *)&pmbuf->pbuf[pmbuf->data_offset +
 						  MLAN_ETHER_PKT_TYPE_OFFSET]);
 
+#ifdef UAP_SUPPORT
 	/** Identify ICMP packet from ETH_IP packet. ICMP packet in IP header
 	 * Protocol field is 0x01 */
-	if (eth_type == MLAN_ETHER_PKT_TYPE_IP) {
-		ip_protocol = *((t_u8 *)(pmbuf->pbuf + pmbuf->data_offset +
-					 MLAN_ETHER_PKT_TYPE_OFFSET +
-					 MLAN_IP_PROTOCOL_OFFSET));
+	/** Enable the ICMP_VIA_BYPASS_TXQ only if wacp_mode is enabled */
+	if ((pmadapter->init_para.wacp_mode) &&
+	    ((pmpriv->bss_role == MLAN_BSS_ROLE_UAP) &&
+	     pmpriv->uap_bss_started)) {
+		if (eth_type == MLAN_ETHER_PKT_TYPE_IP) {
+			ip_protocol =
+				*((t_u8 *)(pmbuf->pbuf + pmbuf->data_offset +
+					   MLAN_ETHER_PKT_TYPE_OFFSET +
+					   MLAN_IP_PROTOCOL_OFFSET));
+			if (ip_protocol == MLAN_IP_PROTOCOL_ICMP)
+				pmbuf->priority = WMM_HIGHEST_PRIORITY;
+		}
 	}
+#endif
 
 	if ((eth_type == MLAN_ETHER_PKT_TYPE_EAPOL) ||
 	    (eth_type == MLAN_ETHER_PKT_TYPE_ARP) ||

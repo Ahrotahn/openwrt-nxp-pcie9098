@@ -3,7 +3,7 @@
  * @brief This file contains the functions for CFG80211.
  *
  *
- * Copyright 2011-2023 NXP
+ * Copyright 2011-2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -206,8 +206,8 @@ void *woal_get_netdev_priv(struct net_device *dev)
  *
  *  @return           radio_type
  */
-static struct ieee80211_channel *woal_get_ieee80211_channel(moal_private *priv,
-						     chan_band_info *pchan_info)
+static struct ieee80211_channel *
+woal_get_ieee80211_channel(moal_private *priv, chan_band_info *pchan_info)
 {
 	enum ieee80211_band band = IEEE80211_BAND_2GHZ;
 	int freq = 0;
@@ -2637,8 +2637,8 @@ void woal_cfg80211_mgmt_frame_register(struct wiphy *wiphy,
  * @return          MFALSE-no need set remain_on_channel
  */
 static t_u8 woal_check_mgmt_tx_channel(moal_private *priv,
-				struct ieee80211_channel *chan,
-				unsigned int wait)
+				       struct ieee80211_channel *chan,
+				       unsigned int wait)
 {
 	int freq;
 	if (priv->bss_type == MLAN_BSS_TYPE_UAP)
@@ -2665,7 +2665,8 @@ static t_u8 woal_check_mgmt_tx_channel(moal_private *priv,
  * @return           0 -- success, otherwise fail
  */
 static int woal_mgmt_tx(moal_private *priv, const u8 *buf, size_t len,
-		 struct ieee80211_channel *chan, u64 cookie, unsigned int wait)
+			struct ieee80211_channel *chan, u64 cookie,
+			unsigned int wait)
 {
 	int ret = 0;
 	pmlan_buffer pmbuf = NULL;
@@ -5166,7 +5167,7 @@ void woal_cfg80211_notify_channel(moal_private *priv,
 #if KERNEL_VERSION(3, 8, 0) <= CFG80211_VERSION_CODE
 	if (MLAN_STATUS_SUCCESS ==
 	    woal_chandef_create(priv, &chandef, pchan_info)) {
-#if KERNEL_VERSION(6, 6, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(6, 7, 0) <= CFG80211_VERSION_CODE
 		wiphy_lock(priv->wdev->wiphy);
 #elif KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
 		mutex_lock(&priv->wdev->mtx);
@@ -5183,7 +5184,7 @@ void woal_cfg80211_notify_channel(moal_private *priv,
 #else
 		cfg80211_ch_switch_notify(priv->netdev, &chandef);
 #endif
-#if KERNEL_VERSION(6, 6, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(6, 7, 0) <= CFG80211_VERSION_CODE
 		wiphy_unlock(priv->wdev->wiphy);
 #elif KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
 		mutex_unlock(&priv->wdev->mtx);

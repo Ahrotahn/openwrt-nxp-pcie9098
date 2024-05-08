@@ -3,7 +3,7 @@
  * @brief This file contains wireless extension standard ioctl functions
  *
  *
- * Copyright 2008-2021 NXP
+ * Copyright 2008-2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -618,7 +618,7 @@ static int woal_set_wap(struct net_device *dev, struct iw_request_info *info,
 	const t_u8 zero_mac[MLAN_MAC_ADDR_LENGTH] = {0, 0, 0, 0, 0, 0};
 	moal_private *priv = (moal_private *)netdev_priv(dev);
 	struct sockaddr *awrq = &wrqu->addr;
-	mlan_ssid_bssid ssid_bssid;
+	mlan_ssid_bssid *ssid_bssid = NULL;
 	mlan_bss_info bss_info;
 
 	ENTER();
@@ -650,29 +650,34 @@ static int woal_set_wap(struct net_device *dev, struct iw_request_info *info,
 	}
 
 	/* Broadcast MAC means search for best network */
-	memset(&ssid_bssid, 0, sizeof(mlan_ssid_bssid));
-
+	ssid_bssid = kzalloc(sizeof(mlan_ssid_bssid), GFP_ATOMIC);
+	if (!ssid_bssid) {
+		PRINTM(MERROR, "Fail to allocate ssid_bssid buffer\n");
+		ret = -ENOMEM;
+		goto done;
+	}
 	if (memcmp(bcast, awrq->sa_data, MLAN_MAC_ADDR_LENGTH)) {
 		/* Check if we are already assoicated to the AP */
 		if (bss_info.media_connected == MTRUE) {
 			if (!memcmp(awrq->sa_data, &bss_info.bssid, ETH_ALEN))
 				goto done;
 		}
-		moal_memcpy_ext(priv->phandle, &ssid_bssid.bssid, awrq->sa_data,
-				ETH_ALEN, sizeof(ssid_bssid.bssid));
+		moal_memcpy_ext(priv->phandle, &ssid_bssid->bssid,
+				awrq->sa_data, ETH_ALEN,
+				sizeof(ssid_bssid->bssid));
 	}
 
 	if (MLAN_STATUS_SUCCESS !=
-	    woal_find_best_network(priv, MOAL_IOCTL_WAIT, &ssid_bssid)) {
+	    woal_find_best_network(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 		PRINTM(MERROR,
 		       "ASSOC: WAP: MAC address not found in BSSID List\n");
 		ret = -ENETUNREACH;
 		goto done;
 	}
 	/* Zero SSID implies use BSSID to connect */
-	memset(&ssid_bssid.ssid, 0, sizeof(mlan_802_11_ssid));
+	memset(&ssid_bssid->ssid, 0, sizeof(mlan_802_11_ssid));
 	if (MLAN_STATUS_SUCCESS !=
-	    woal_bss_start(priv, MOAL_IOCTL_WAIT, &ssid_bssid)) {
+	    woal_bss_start(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 		ret = -EFAULT;
 		goto done;
 	}
@@ -693,7 +698,8 @@ static int woal_set_wap(struct net_device *dev, struct iw_request_info *info,
 #endif /* REASSOCIATION */
 
 done:
-
+	if (ssid_bssid)
+		kfree(ssid_bssid);
 	LEAVE();
 	return ret;
 }
@@ -1174,6 +1180,13 @@ static int woal_get_encode(struct net_device *dev, struct iw_request_info *info,
 	case MLAN_AUTH_MODE_SHARED:
 	case MLAN_AUTH_MODE_NETWORKEAP:
 		dwrq->flags = IW_ENCODE_RESTRICTED;
+		break;
+
+	case MLAN_AUTH_MODE_SAE:
+		dwrq->flags = IW_ENCODE_RESTRICTED;
+		break;
+	case MLAN_AUTH_MODE_OWE:
+		dwrq->flags = IW_ENCODE_OPEN;
 		break;
 
 	case MLAN_AUTH_MODE_AUTO:
@@ -2654,7 +2667,7 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 	moal_private *priv = (moal_private *)netdev_priv(dev);
 	struct iw_point *dwrq = &wrqu->data;
 	mlan_802_11_ssid req_ssid;
-	mlan_ssid_bssid ssid_bssid;
+	mlan_ssid_bssid *ssid_bssid = NULL;
 	mlan_ssid_bssid *owe_ssid_bssid = NULL;
 #ifdef REASSOCIATION
 	moal_handle *handle = priv->phandle;
@@ -2684,7 +2697,12 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 	if (priv->scan_type == MLAN_SCAN_TYPE_PASSIVE)
 		woal_set_scan_type(priv, MLAN_SCAN_TYPE_ACTIVE);
 	memset(&req_ssid, 0, sizeof(mlan_802_11_ssid));
-	memset(&ssid_bssid, 0, sizeof(mlan_ssid_bssid));
+	ssid_bssid = kzalloc(sizeof(mlan_ssid_bssid), GFP_ATOMIC);
+	if (!ssid_bssid) {
+		PRINTM(MERROR, "Fail to allocate ssid_bssid buffer\n");
+		ret = -ENOMEM;
+		goto setessid_ret;
+	}
 
 #if WIRELESS_EXT > 20
 	req_ssid.ssid_len = dwrq->length;
@@ -2725,10 +2743,10 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 
 		PRINTM(MINFO, "Requested new SSID = %s\n",
 		       (char *)req_ssid.ssid);
-		moal_memcpy_ext(priv->phandle, &ssid_bssid.ssid, &req_ssid,
+		moal_memcpy_ext(priv->phandle, &ssid_bssid->ssid, &req_ssid,
 				sizeof(mlan_802_11_ssid),
-				sizeof(ssid_bssid.ssid));
-		if (MTRUE == woal_is_connected(priv, &ssid_bssid)) {
+				sizeof(mlan_802_11_ssid));
+		if (MTRUE == woal_is_connected(priv, ssid_bssid)) {
 			PRINTM(MIOCTL, "Already connect to the network\n");
 			goto setessid_ret;
 		}
@@ -2767,7 +2785,7 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 
 		if (dwrq->flags != 0xFFFF) {
 			if (MLAN_STATUS_SUCCESS !=
-			    woal_find_essid(priv, &ssid_bssid,
+			    woal_find_essid(priv, ssid_bssid,
 					    MOAL_IOCTL_WAIT)) {
 				/* Do specific SSID scanning */
 				if (MLAN_STATUS_SUCCESS !=
@@ -2792,13 +2810,12 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 
 	if (mode != IW_MODE_ADHOC) {
 		if (MLAN_STATUS_SUCCESS !=
-		    woal_find_best_network(priv, MOAL_IOCTL_WAIT,
-					   &ssid_bssid)) {
+		    woal_find_best_network(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 			ret = -EFAULT;
 			goto setessid_ret;
 		}
-		if (ssid_bssid.trans_ssid.ssid_len &&
-		    (ssid_bssid.owe_transition_mode == OWE_TRANS_MODE_OPEN)) {
+		if (ssid_bssid->trans_ssid.ssid_len &&
+		    (ssid_bssid->owe_transition_mode == OWE_TRANS_MODE_OPEN)) {
 			// We need scan for OWE AP
 			owe_ssid_bssid = (mlan_ssid_bssid *)kmalloc(
 				sizeof(mlan_ssid_bssid), GFP_KERNEL);
@@ -2807,34 +2824,34 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 				ret = -ENOMEM;
 				goto setessid_ret;
 			}
-			woal_owe_specific_scan(priv, &ssid_bssid);
+			woal_owe_specific_scan(priv, ssid_bssid);
 			memset(owe_ssid_bssid, 0, sizeof(mlan_ssid_bssid));
 			moal_memcpy_ext(priv->phandle, &owe_ssid_bssid->ssid,
-					&ssid_bssid.trans_ssid,
+					&ssid_bssid->trans_ssid,
 					sizeof(mlan_802_11_ssid),
 					sizeof(owe_ssid_bssid->ssid));
 			moal_memcpy_ext(priv->phandle, &owe_ssid_bssid->bssid,
-					&ssid_bssid.trans_bssid,
+					&ssid_bssid->trans_bssid,
 					sizeof(mlan_802_11_mac_addr),
 					sizeof(owe_ssid_bssid->bssid));
 			if (MLAN_STATUS_SUCCESS ==
 			    woal_find_essid(priv, owe_ssid_bssid,
 					    MOAL_IOCTL_WAIT))
-				moal_memcpy_ext(priv->phandle, &ssid_bssid,
+				moal_memcpy_ext(priv->phandle, ssid_bssid,
 						owe_ssid_bssid,
 						sizeof(mlan_ssid_bssid),
-						sizeof(ssid_bssid));
+						sizeof(mlan_ssid_bssid));
 		}
 		if (MLAN_STATUS_SUCCESS !=
 		    woal_11d_check_ap_channel(priv, MOAL_IOCTL_WAIT,
-					      &ssid_bssid)) {
+					      ssid_bssid)) {
 			PRINTM(MERROR,
 			       "The AP's channel is invalid for current region\n");
 			ret = -EFAULT;
 			goto setessid_ret;
 		}
 	} else if (MLAN_STATUS_SUCCESS !=
-		   woal_find_best_network(priv, MOAL_IOCTL_WAIT, &ssid_bssid))
+		   woal_find_best_network(priv, MOAL_IOCTL_WAIT, ssid_bssid))
 		/* Adhoc start, Check the channel command */
 		woal_11h_channel_check_ioctl(priv, MOAL_IOCTL_WAIT);
 
@@ -2849,10 +2866,10 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 #endif /* REASSOCIATION */
 
 	/* Connect to BSS by ESSID */
-	memset(&ssid_bssid.bssid, 0, MLAN_MAC_ADDR_LENGTH);
+	memset(&ssid_bssid->bssid, 0, MLAN_MAC_ADDR_LENGTH);
 
 	if (MLAN_STATUS_SUCCESS !=
-	    woal_bss_start(priv, MOAL_IOCTL_WAIT, &ssid_bssid)) {
+	    woal_bss_start(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
 		ret = -EFAULT;
 		goto setessid_ret;
 	}
@@ -2873,6 +2890,8 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 #endif /* REASSOCIATION */
 
 setessid_ret:
+	if (ssid_bssid)
+		kfree(ssid_bssid);
 	if (priv->scan_type == MLAN_SCAN_TYPE_PASSIVE)
 		woal_set_scan_type(priv, MLAN_SCAN_TYPE_PASSIVE);
 #ifdef REASSOCIATION

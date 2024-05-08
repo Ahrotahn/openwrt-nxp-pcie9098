@@ -4,7 +4,7 @@
  * driver.
  *
  *
- * Copyright 2008-2022 NXP
+ * Copyright 2008-2022, 2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -519,6 +519,50 @@ static struct _card_info card_info_SDIW624 = {
 };
 #endif
 
+#ifdef SDAW693
+static struct _card_info card_info_SDAW693 = {
+	.embedded_supp = 1,
+	.drcs = 1,
+	.go_noa = 1,
+	.v16_fw_api = 1,
+	.v17_fw_api = 1,
+	.pmic = 1,
+	.cal_data_cfg = 0,
+	.low_power_enable = 0,
+	.rx_rate_max = 412,
+	.histogram_table_num = 3,
+	.feature_control = FEATURE_CTRL_DEFAULT,
+	.rev_id_reg = 0xc8,
+	.host_strap_reg = 0xf4,
+	.magic_reg = 0xf0,
+	.fw_name = SDAW693_DEFAULT_COMBO_FW_NAME,
+	.fw_name_wlan = SDAW693_DEFAULT_WLAN_FW_NAME,
+#ifdef SDIO
+	.dump_fw_info = DUMP_FW_SDIO_V3,
+	.dump_fw_ctrl_reg = 0xf9,
+	.dump_fw_start_reg = 0xf1,
+	.dump_fw_end_reg = 0xf8,
+	.dump_fw_host_ready = 0xcc,
+	.dump_reg.reg_table = {0x08, 0x58, 0x5C, 0x5D, 0x60, 0x61, 0x62, 0x64,
+			       0x65, 0x66, 0x68, 0x69, 0x6a},
+	.dump_reg.reg_table_size = 13,
+	.scratch_reg = 0xe8,
+	.func1_reg_start = 0x10,
+	.func1_reg_end = 0x17,
+	.fw_stuck_code_reg = 0xEB,
+	.fw_reset_reg = 0x0EE,
+	.fw_reset_val = 0x99,
+	.fw_wakeup_reg = 0,
+	.fw_wakeup_val = 2,
+	.slew_rate_reg = 0x90002328,
+	.slew_rate_bit_offset = 12,
+#endif
+	.sniffer_support = 1,
+	.per_pkt_cfg_support = 1,
+	.host_mlme_required = 1,
+};
+#endif
+
 #ifdef SD9177
 static struct _card_info card_info_SD9177 = {
 	.embedded_supp = 1,
@@ -716,6 +760,34 @@ static struct _card_info card_info_PCIEIW624 = {
 };
 #endif
 
+#ifdef PCIEAW693
+static struct _card_info card_info_PCIEAW693 = {
+	.embedded_supp = 1,
+	.drcs = 1,
+	.go_noa = 1,
+	.v16_fw_api = 1,
+	.v17_fw_api = 1,
+	.pmic = 1,
+	.cal_data_cfg = 0,
+	.low_power_enable = 0,
+	.rx_rate_max = 412,
+	.histogram_table_num = 3,
+	.feature_control = FEATURE_CTRL_DEFAULT,
+	.rev_id_reg = 0x8,
+	.host_strap_reg = 0x1c70,
+	.magic_reg = 0x1c74,
+	.fw_name = PCIEAW693_DEFAULT_COMBO_FW_NAME,
+	.fw_name_wlan = PCIEAW693_DEFAULT_WLAN_FW_NAME,
+	.fw_stuck_code_reg = 0x1c80,
+	.fw_reset_reg = 0x1c94,
+	.fw_reset_val = 0x98,
+	.fw_wakeup_reg = 0x0,
+	.sniffer_support = 1,
+	.per_pkt_cfg_support = 1,
+	.host_mlme_required = 1,
+};
+#endif
+
 #ifdef USB8801
 static struct _card_info card_info_USB8801 = {
 	.embedded_supp = 0,
@@ -903,6 +975,8 @@ static struct _card_info card_info_SD8987 = {
 };
 #endif
 
+#define NXP_ETH_P_EAPOL 0x888E
+
 /** Driver version */
 char driver_version[] =
 	INTF_CARDTYPE KERN_VERSION "--" MLAN_RELEASE_VERSION "-GPL"
@@ -1021,6 +1095,57 @@ static struct work_struct hang_work;
 static struct workqueue_struct *register_workqueue;
 /** register work */
 static struct work_struct register_work;
+
+#ifdef DUMP_TO_PROC
+#define MAX_BUF_SIZE 100
+/**
+ *  @brief This function writes the fw dump in kernel(dmesg) log
+ *
+ *  @param pfd_buf       pointer to fw dump buffer
+ *  @param fwdump_len    length of fw dump buffer
+ *
+ *  @return              N/A
+ */
+void woal_print_firmware_dump_buf(t_u8 *pfd_buf, t_u64 fwdump_len)
+{
+	t_u64 i = 0, count = 0;
+	u8 buf[MAX_BUF_SIZE] = {0};
+	u8 *ptr = NULL;
+	ENTER();
+
+	if (!pfd_buf || !fwdump_len) {
+		PRINTM(MERROR,
+		       "%s: fw dump buffer is NULL or total length is zero\n",
+		       __func__);
+		return;
+	}
+
+	PRINTM(MFW_D, "===== FW Dump To Console START=====\n");
+	for (i = 0; ((i < fwdump_len) && ((i + 15) < fwdump_len)); i += 16) {
+		PRINTM(MFW_D,
+		       "[FW Dump] %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n",
+		       pfd_buf[i], pfd_buf[i + 1], pfd_buf[i + 2],
+		       pfd_buf[i + 3], pfd_buf[i + 4], pfd_buf[i + 5],
+		       pfd_buf[i + 6], pfd_buf[i + 7], pfd_buf[i + 8],
+		       pfd_buf[i + 9], pfd_buf[i + 10], pfd_buf[i + 11],
+		       pfd_buf[i + 12], pfd_buf[i + 13], pfd_buf[i + 14],
+		       pfd_buf[i + 15]);
+		count++;
+		moal_usleep_range(NULL, 40, 50);
+	}
+
+	if (i < fwdump_len) {
+		ptr = buf;
+		for (; i < fwdump_len; i++) {
+			ptr += snprintf(ptr, MAX_BUF_SIZE, " %02X", pfd_buf[i]);
+		}
+		PRINTM(MFW_D, "[FW Dump]%s\n", buf);
+	}
+
+	PRINTM(MFW_D, "===== FW Dump To Console END=====\n");
+	PRINTM(MFW_D, "FW Dump buffer length = %llu\n", fwdump_len);
+}
+#endif
 
 /**
  *  @brief This function send fw dump event to kernel
@@ -1336,7 +1461,8 @@ static void woal_hang_work_queue(struct work_struct *work)
 void woal_process_hang(moal_handle *handle)
 {
 	ENTER();
-	if (!handle || handle->fw_reseting) {
+	if (!handle || handle->fw_reseting ||
+	    (handle->hardware_status != HardwareStatusReady)) {
 		LEAVE();
 		return;
 	}
@@ -2437,6 +2563,7 @@ mlan_status woal_init_sw(moal_handle *handle)
 	device.inact_tmo = handle->params.inact_tmo;
 #ifdef UAP_SUPPORT
 	device.uap_max_sta = handle->params.uap_max_sta;
+	device.wacp_mode = handle->params.wacp_mode;
 #endif
 	device.mcs32 = handle->params.mcs32;
 	device.hs_wake_interval = handle->params.hs_wake_interval;
@@ -2540,6 +2667,10 @@ void woal_free_moal_handle(moal_handle *handle)
 	}
 #endif
 
+	if (handle->is_fw_dump_timer_set) {
+		woal_cancel_timer(&handle->fw_dump_timer);
+		handle->is_fw_dump_timer_set = MFALSE;
+	}
 	/* Free allocated memory for fwdump filename */
 	kfree(handle->fwdump_fname);
 	if (fwdump_fname) {
@@ -2736,7 +2867,7 @@ static t_u32 woal_set_sdio_slew_rate(moal_handle *handle)
 	    (handle->params.slew_rate > 3 || handle->params.slew_rate < 0))
 		return MLAN_STATUS_FAILURE;
 #if defined(SD9098) || defined(SD9097) || defined(SDIW624) ||                  \
-	defined(SD9177) || defined(SDIW615)
+	defined(SDAW693) || defined(SD9177) || defined(SDIW615)
 	if (IS_SD9098(handle->card_type) || IS_SD9097(handle->card_type) ||
 	    IS_SDIW624(handle->card_type) || IS_SDIW615(handle->card_type) ||
 	    IS_SD9177(handle->card_type))
@@ -3806,13 +3937,13 @@ static ssize_t woal_set_rps_map(struct netdev_rx_queue *queue, const char *buf,
 static mlan_status woal_add_card_dpc(moal_handle *handle)
 {
 	mlan_status ret = MLAN_STATUS_SUCCESS;
-	int i;
+	int i, j;
 	char str_buf[MLAN_MAX_VER_STR_LEN];
 
 #if defined(CONFIG_RPS)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	moal_private *priv_rps = NULL;
-	t_u8 rps_buf[2];
+	t_u8 rps_buf[3];
 #endif
 #endif
 
@@ -3935,19 +4066,27 @@ static mlan_status woal_add_card_dpc(moal_handle *handle)
 #if defined(CONFIG_RPS)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 7, 0)
 	if (handle->params.rps) {
-		priv_rps = woal_get_priv_bss_type(handle, MLAN_BSS_TYPE_STA);
 		snprintf(rps_buf, sizeof(rps_buf), "%x", handle->params.rps);
-		if (priv_rps) {
-			PRINTM(MCMND,
-			       "num_rx_queues=%u real_num_rx_queues=%u\n",
-			       priv_rps->netdev->num_rx_queues,
-			       priv_rps->netdev->real_num_rx_queues);
-			for (i = 0;
-			     i < (int)MIN(priv_rps->netdev->num_rx_queues,
-					  priv_rps->netdev->real_num_rx_queues);
-			     i++) {
-				woal_set_rps_map(&(priv_rps->netdev->_rx[i]),
-						 rps_buf, strlen(rps_buf));
+		for (i = 0; i < MIN(handle->priv_num, MLAN_MAX_BSS_NUM); i++) {
+			priv_rps = handle->priv[i];
+			if (priv_rps && priv_rps->netdev) {
+				PRINTM(MCMND, "bss_type=%d bss_role=%d \n",
+				       priv_rps->bss_type, priv_rps->bss_role);
+				PRINTM(MCMND,
+				       "num_rx_queues=%u real_num_rx_queues=%u rps_buf=%s\n",
+				       priv_rps->netdev->num_rx_queues,
+				       priv_rps->netdev->real_num_rx_queues,
+				       rps_buf);
+				for (j = 0;
+				     j <
+				     (int)MIN(priv_rps->netdev->num_rx_queues,
+					      priv_rps->netdev
+						      ->real_num_rx_queues);
+				     j++) {
+					woal_set_rps_map(
+						&(priv_rps->netdev->_rx[j]),
+						rps_buf, strlen(rps_buf));
+				}
 			}
 		}
 	}
@@ -4304,8 +4443,11 @@ static mlan_status woal_init_fw_dpc(moal_handle *handle)
 			fw.fw_reload = handle->params.fw_reload;
 		else
 			fw.fw_reload = 0;
+		/* Make sure device is awake before FW download */
+		mlan_pm_wakeup_card(handle->pmlan_adapter, MTRUE);
 		wifi_status = WIFI_STATUS_FW_DNLD;
 		ret = mlan_dnld_fw(handle->pmlan_adapter, &fw);
+		mlan_pm_wakeup_card(handle->pmlan_adapter, MFALSE);
 		if (ret == MLAN_STATUS_FAILURE) {
 			wifi_status = WIFI_STATUS_DNLD_FW_FAIL;
 			PRINTM(MERROR,
@@ -4386,13 +4528,20 @@ static mlan_status woal_init_fw_dpc(moal_handle *handle)
 			   10 * HZ);
 	if (handle->hardware_status != HardwareStatusReady) {
 		wifi_status = WIFI_STATUS_INIT_FW_FAIL;
+		handle->event_fw_dump = MFALSE;
 		if (handle->ops.reg_dbg)
 			handle->ops.reg_dbg(handle);
 #ifdef DEBUG_LEVEL1
 		if (drvdbg & MFW_D) {
-			drvdbg &= ~MFW_D;
-			if (handle->ops.dump_fw_info)
+			if (handle->ops.dump_fw_info) {
 				handle->ops.dump_fw_info(handle);
+#ifdef DUMP_TO_PROC
+				woal_print_firmware_dump_buf(
+					handle->fw_dump_buf,
+					handle->fw_dump_len);
+#endif
+			}
+			drvdbg &= ~MFW_D;
 		}
 #endif
 		ret = MLAN_STATUS_FAILURE;
@@ -5355,6 +5504,12 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 	spin_lock_init(&priv->mcast_lock);
 
 #ifdef STA_CFG80211
+	INIT_LIST_HEAD(&priv->dhcp_discover_queue);
+	/* CID - 10017917 */
+	// coverity[side_effect_free: SUPPRESS]
+	spin_lock_init(&priv->dhcp_discover_lock);
+#endif
+#ifdef STA_CFG80211
 #ifdef STA_SUPPORT
 	spin_lock_init(&priv->connect_lock);
 #endif
@@ -5650,6 +5805,9 @@ void woal_remove_interface(moal_handle *handle, t_u8 bss_index)
 	woal_flush_tcp_sess_queue(priv);
 
 	woal_flush_tx_stat_queue(priv);
+#ifdef STA_CFG80211
+	woal_flush_dhcp_discover_queue(priv);
+#endif
 
 #ifdef STA_CFG80211
 	if (priv->bss_type == MLAN_BSS_TYPE_STA)
@@ -5735,9 +5893,16 @@ void woal_remove_interface(moal_handle *handle, t_u8 bss_index)
 	/* Clear the whole backhaul station list in moal */
 	for (count = 0; count < MAX_STA_COUNT; count++) {
 		if (priv->vlan_sta_list[count]) {
-			if (priv->vlan_sta_list[count]->is_valid)
+			if (priv->vlan_sta_list[count]->is_valid) {
+				priv->vlan_sta_list[count]->is_valid = MFALSE;
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
+				cfg80211_unregister_netdevice(
+					priv->vlan_sta_list[count]->netdev);
+#else
 				unregister_netdevice(
 					priv->vlan_sta_list[count]->netdev);
+#endif
+			}
 			kfree(priv->vlan_sta_list[count]);
 		}
 		priv->vlan_sta_list[count] = NULL;
@@ -6281,6 +6446,9 @@ int woal_close(struct net_device *dev)
 #endif
 
 	woal_flush_tx_stat_queue(priv);
+#ifdef STA_CFG80211
+	woal_flush_dhcp_discover_queue(priv);
+#endif
 
 	if ((priv->media_connected == MTRUE)
 #ifdef UAP_SUPPORT
@@ -6961,7 +7129,6 @@ u16 woal_select_queue(struct net_device *dev, struct sk_buff *skb
 #else
 	tid = skb->priority = woal_classify8021d(skb);
 #endif
-#define NXP_ETH_P_EAPOL 0x888E
 #define NXP_ETH_P_WAPI 0x88B4
 	switch (skb->protocol) {
 	case htons(ETH_P_ARP):
@@ -7076,6 +7243,143 @@ void woal_remove_tx_info(moal_private *priv, t_u8 tx_seq_num)
 
 	LEAVE();
 }
+
+#if defined(STA_CFG80211)
+/**
+ *  @brief This function flushes timesync info queue
+ *
+ *  @param priv      		A pointer to moal_private structure
+ *
+ *  @return	         N/A
+ */
+void woal_flush_dhcp_discover_queue(moal_private *priv)
+{
+	struct dhcp_discover_info *discover_info = NULL, *tmp_node;
+	unsigned long flags;
+	spin_lock_irqsave(&priv->dhcp_discover_lock, flags);
+	list_for_each_entry_safe (discover_info, tmp_node,
+				  &priv->dhcp_discover_queue, link) {
+		list_del(&discover_info->link);
+		kfree(discover_info);
+	}
+	INIT_LIST_HEAD(&priv->dhcp_discover_queue);
+	spin_unlock_irqrestore(&priv->dhcp_discover_lock, flags);
+}
+
+/**
+ *  @brief This function gets dhcp_discover_info
+ *
+ *  @param priv      		A pointer to moal_private structure
+ *  @param transation_id         token_id of the packet
+ *
+ *  @return	         N/A
+ */
+struct dhcp_discover_info *woal_get_dhcp_discover_info(moal_private *priv,
+						       t_u32 transaction_id)
+{
+	struct dhcp_discover_info *discover_info = NULL;
+
+	ENTER();
+	list_for_each_entry (discover_info, &priv->dhcp_discover_queue, link) {
+		// TODO: add 5 second ageout check
+		if (discover_info->transaction_id == transaction_id) {
+			LEAVE();
+			return discover_info;
+		}
+	}
+	LEAVE();
+	return NULL;
+}
+
+/**
+ * @brief add dhcp_discover_node
+ *
+ * @param priv                  A pointer to moal_private structure
+ * @param transaction_id        dhcp discover pkt's transaction_id
+ * @param pmbuf                 pmbuf
+ *
+ * @return                      N/A
+ */
+t_void woal_add_dhcp_discover_node(moal_private *priv, t_u32 transaction_id,
+				   mlan_buffer *pmbuf)
+{
+	struct dhcp_discover_info *node = NULL;
+	unsigned long flags;
+	t_u8 find_node = MFALSE;
+	if (priv) {
+		spin_lock_irqsave(&priv->dhcp_discover_lock, flags);
+		list_for_each_entry (node, &priv->dhcp_discover_queue, link) {
+			if (node->transaction_id == transaction_id) {
+				find_node = MTRUE;
+				node->in_ts_sec = pmbuf->in_ts_sec;
+				node->in_ts_usec = pmbuf->in_ts_usec;
+				break;
+			}
+		}
+		if (!find_node) {
+			/* create new mcast node */
+			node = kzalloc(sizeof(struct dhcp_discover_info),
+				       GFP_ATOMIC);
+			if (node) {
+				node->transaction_id = transaction_id;
+				node->in_ts_sec = pmbuf->in_ts_sec;
+				node->in_ts_usec = pmbuf->in_ts_usec;
+				INIT_LIST_HEAD(&node->link);
+				list_add_tail(&node->link,
+					      &priv->dhcp_discover_queue);
+				PRINTM(MCMND,
+				       "Add to dhcp_disover_queue: transaction_id=0x%x\n",
+				       transaction_id);
+			}
+		}
+		spin_unlock_irqrestore(&priv->dhcp_discover_lock, flags);
+	}
+	/* CID - 36267456 */
+	// coverity[leaked_storage:SUPPRESS]
+}
+
+/**
+ * @brief get_dhcp_discover packet's transation_id
+ *
+ * @param skb                   point to struct skb_buff
+ *
+ * @return                      transation_id
+ */
+t_u32 woal_get_dhcp_discover_transation_id(struct sk_buff *skb)
+{
+	struct ethhdr *eth;
+	struct iphdr *iph;
+	struct udphdr *udph;
+	struct dhcp_pkt *dhcp_info;
+	t_u16 min_pkt_size = 0;
+	const t_u8 bc_mac[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+
+	ENTER();
+	eth = (struct ethhdr *)(skb->data);
+	if (memcmp(eth->h_dest, bc_mac, MLAN_MAC_ADDR_LENGTH))
+		goto done;
+	min_pkt_size = DHCP_ETH_HEADER_SIZE + DHCP_MIN_IP_HEADER_SIZE +
+		       DHCP_UDP_HEADER_SIZE + sizeof(struct dhcp_pkt);
+	if (skb->len < min_pkt_size)
+		goto done;
+	if (eth->h_proto == __constant_htons(ETH_P_IP)) {
+		iph = (struct iphdr *)((t_u8 *)eth + sizeof(struct ethhdr));
+		if (iph->protocol == DHCP_UDP_PROTO) {
+			udph = (struct udphdr *)((t_u8 *)iph + (iph->ihl << 2));
+			if (udph->source == __constant_htons(DHCP_SRC_PORT) &&
+			    udph->dest == __constant_htons(DHCP_DST_PORT)) {
+				dhcp_info = (struct dhcp_pkt
+						     *)((t_u8 *)udph +
+							sizeof(struct udphdr));
+				return __constant_htonl(dhcp_info->xid);
+			}
+		}
+	}
+done:
+	LEAVE();
+	return 0;
+}
+#endif
 
 /**
  *  @brief This function flush mcast list
@@ -7883,6 +8187,15 @@ static void woal_start_xmit(moal_private *priv, struct sk_buff *skb)
 	}
 #endif
 #endif
+#ifdef STA_CFG80211
+	if (priv->multi_ap_flag && priv->bss_type == MLAN_BSS_TYPE_STA) {
+		t_u32 transaction_id;
+		transaction_id = woal_get_dhcp_discover_transation_id(skb);
+		if (transaction_id)
+			woal_add_dhcp_discover_node(priv, transaction_id,
+						    pmbuf);
+	}
+#endif
 
 	if (priv->enable_tcp_ack_enh == MTRUE) {
 		ret = woal_process_tcp_ack(priv, pmbuf);
@@ -7992,7 +8305,8 @@ netdev_tx_t woal_hard_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		priv->stats.tx_dropped++;
 		goto done;
 	}
-	if (moal_extflg_isset(priv->phandle, EXT_TX_WORK)) {
+	if (moal_extflg_isset(priv->phandle, EXT_TX_WORK) &&
+	    (skb->protocol != htons(NXP_ETH_P_EAPOL))) {
 		spin_lock_bh(&(priv->tx_q.lock));
 		__skb_queue_tail(&(priv->tx_q), skb);
 		spin_unlock_bh(&(priv->tx_q.lock));
@@ -8705,7 +9019,7 @@ pmlan_ioctl_req woal_alloc_mlan_ioctl_req(int size)
 	t_s32 temp_size = 0;
 	ENTER();
 
-	flag = (in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL;
+	flag = GFP_ATOMIC;
 
 	if (!woal_secure_add(
 		    &size,
@@ -8814,6 +9128,11 @@ static int woal_get_card_info(moal_handle *phandle)
 		phandle->card_info = &card_info_SD9097;
 		break;
 #endif
+#ifdef SDAW693
+	case CARD_TYPE_SDAW693:
+		phandle->card_info = &card_info_SDAW693;
+		break;
+#endif
 #ifdef SDIW624
 	case CARD_TYPE_SDIW624:
 		phandle->card_info = &card_info_SDIW624;
@@ -8838,6 +9157,12 @@ static int woal_get_card_info(moal_handle *phandle)
 #ifdef PCIE9097
 	case CARD_TYPE_PCIE9097:
 		phandle->card_info = &card_info_PCIE9097;
+		break;
+#endif
+#ifdef PCIEAW693
+	case CARD_TYPE_PCIEAW693:
+		phandle->card_info = &card_info_PCIEAW693;
+		phandle->event_fw_dump = MTRUE;
 		break;
 #endif
 #ifdef PCIEIW624
@@ -9910,7 +10235,11 @@ t_void woal_store_firmware_dump(moal_handle *phandle, mlan_event *pmevent)
 	moal_memcpy_ext(phandle, pos, pmevent->event_buf + OFFSET_SEQNUM,
 			pmevent->event_len - OFFSET_SEQNUM,
 			FW_DUMP_INFO_LEN - phandle->fw_dump_len);
-	phandle->fw_dump_len += pmevent->event_len - OFFSET_SEQNUM;
+	if (pmevent->event_len > OFFSET_SEQNUM) {
+		phandle->fw_dump_len += pmevent->event_len - OFFSET_SEQNUM;
+	} else {
+		PRINTM(MERROR, "event_len is invalid\n");
+	}
 
 	PRINTM(MINFO, "fw dump event: evt_len=%d toal_len=%ld\n",
 	       pmevent->event_len, (long int)phandle->fw_dump_len);
@@ -9937,6 +10266,66 @@ t_void woal_store_firmware_dump(moal_handle *phandle, mlan_event *pmevent)
 }
 
 #else
+
+t_void woal_print_firmware_dump(moal_handle *phandle, char *fwdp_fname)
+{
+	struct file *pfile_fwdump = NULL;
+	loff_t pos = 0;
+	t_u8 *pbuf = NULL;
+	t_u32 i = 0, count = 0, fwdump_len = 0, ret = 0;
+
+	ENTER();
+
+	pos = 0;
+	fwdump_len = (t_u32)phandle->fw_dump_len;
+
+	ret = moal_vmalloc(phandle, fwdump_len, &pbuf);
+	if (ret != MLAN_STATUS_SUCCESS || !pbuf) {
+		PRINTM(MFWDP_D, " moal_vmalloc failed\n");
+	} else {
+		memset(pbuf, 0, fwdump_len);
+		pfile_fwdump = filp_open(fwdp_fname, O_RDONLY, 0644);
+		ret = kernel_read(pfile_fwdump, pbuf,
+				  (long int)phandle->fw_dump_len, &pos);
+
+		if (ret <= 0) {
+			PRINTM(MFWDP_D, "kernel_read failed %d\n", ret);
+		} else {
+			PRINTM(MFWDP_D,
+			       "===== FW Dump To Console START=====\n");
+			for (i = 0;
+			     ((i < fwdump_len) && ((i + 15) < fwdump_len));
+			     i += 16) {
+				PRINTM(MFWDP_D,
+				       "[FW Dump] %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X %02X\n",
+				       pbuf[i], pbuf[i + 1], pbuf[i + 2],
+				       pbuf[i + 3], pbuf[i + 4], pbuf[i + 5],
+				       pbuf[i + 6], pbuf[i + 7], pbuf[i + 8],
+				       pbuf[i + 9], pbuf[i + 10], pbuf[i + 11],
+				       pbuf[i + 12], pbuf[i + 13], pbuf[i + 14],
+				       pbuf[i + 15]);
+				count++;
+				usleep_range(10, 20);
+			}
+
+			if (i < fwdump_len) {
+				for (; i < fwdump_len; i++) {
+					PRINTM(MFWDP_D, "%02X\n", pbuf[i]);
+				}
+			}
+
+			PRINTM(MFWDP_D, "===== FW Dump To Console END=====\n");
+			PRINTM(MFWDP_D, "FW Dump buffer length = %d\n",
+			       fwdump_len);
+		}
+
+		filp_close(pfile_fwdump, NULL);
+	}
+
+	if (pbuf)
+		moal_vfree(phandle, pbuf);
+}
+
 t_void woal_store_firmware_dump(moal_handle *phandle, mlan_event *pmevent)
 {
 	struct file *pfile_fwdump = NULL;
@@ -10020,7 +10409,11 @@ t_void woal_store_firmware_dump(moal_handle *phandle, mlan_event *pmevent)
 		LEAVE();
 		return;
 	}
-	phandle->fw_dump_len += pmevent->event_len - OFFSET_SEQNUM;
+	if (pmevent->event_len > OFFSET_SEQNUM) {
+		phandle->fw_dump_len += pmevent->event_len - OFFSET_SEQNUM;
+	} else {
+		PRINTM(MERROR, "event_len is invalid\n");
+	}
 #if LINUX_VERSION_CODE < KERNEL_VERSION(4, 14, 0)
 	vfs_write(pfile_fwdump,
 		  (const char __user *)pmevent->event_buf + OFFSET_SEQNUM,
@@ -10031,6 +10424,10 @@ t_void woal_store_firmware_dump(moal_handle *phandle, mlan_event *pmevent)
 #endif
 	filp_close(pfile_fwdump, NULL);
 	if (type == DUMP_TYPE_ENDE) {
+		woal_print_firmware_dump(phandle,
+					 (phandle->fwdump_fname ?
+						  phandle->fwdump_fname :
+						  fwdump_fname));
 		PRINTM(MMSG, "==== FW DUMP END: %ld bytes ====\n",
 		       (long int)phandle->fw_dump_len);
 		phandle->fw_dump = MFALSE;
@@ -10050,7 +10447,7 @@ t_void woal_store_firmware_dump(moal_handle *phandle, mlan_event *pmevent)
 }
 #endif /* DUMP_TO_PROC */
 
-#define DRV_INFO_SIZE 0x60000
+#define DRV_INFO_SIZE 0xA0000
 #define DRV_INFO_PER_INTF 0x11000
 #define ROW_SIZE_16 16
 #define ROW_SIZE_32 32
@@ -10084,7 +10481,7 @@ static int woal_save_hex_dump(int rowsize, const void *buf, size_t len,
 		hex_dump_to_buffer(ptr + i, linelen, rowsize, 1, linebuf,
 				   sizeof(linebuf), false);
 
-		pos += snprintf(pos, MAX_BUF_LEN, "%s\n", linebuf);
+		pos += snprintf(pos, sizeof(linebuf), "%s\n", linebuf);
 	}
 
 	return (int)(pos - (char *)save_buf);
@@ -11507,7 +11904,7 @@ t_void woal_evt_work_queue(struct work_struct *work)
 			break;
 		case WOAL_EVENT_RX_MGMT_PKT:
 #if defined(UAP_CFG80211) || defined(STA_CFG80211)
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 7, 0)
 			priv = evt->priv;
 			wiphy_lock(priv->wdev->wiphy);
 			cfg80211_rx_mlme_mgmt(priv->netdev, evt->evt.event_buf,
@@ -13683,6 +14080,9 @@ static void woal_cleanup_module(void)
 				goto exit;
 			}
 			woal_flush_tx_stat_queue(handle->priv[i]);
+#ifdef STA_CFG80211
+			woal_flush_dhcp_discover_queue(handle->priv[i]);
+#endif
 #endif
 		}
 

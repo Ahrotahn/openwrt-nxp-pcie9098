@@ -489,7 +489,12 @@ int woal_packet_fate_monitor(moal_private *priv,
  * Version of APF instruction set processed by accept_packet().
  * Should be returned by wifi_get_packet_filter_info.
  */
+#if (defined(ANDROID_SDK_VERSION) && ANDROID_SDK_VERSION >= 34)
+#define APF_VERSION 4
+#else
 #define APF_VERSION 2
+#endif
+
 /** =========== Define Copied from apf_interpreter.h END =========== */
 
 /** =========== Define Copied from apf_interpreter.c START =========== */

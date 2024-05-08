@@ -88,6 +88,9 @@ Change log:
 
 #define UAP_BEACON_STUCK_DETECT 25
 
+/** wacp_mode Config */
+#define UAP_WACP_MODE 26
+
 /** Private command ID to Power Mode */
 #define UAP_POWER_MODE (SIOCDEVPRIVATE + 3)
 
@@ -207,6 +210,19 @@ typedef struct _skip_cac_para {
 	/** bandwidth */
 	t_u8 bw;
 } skip_cac_para;
+
+typedef struct _wacp_mode_para {
+	/** Action */
+	t_u32 subcmd;
+	/** Action */
+	t_u32 action;
+	/** TLV type*/
+	t_u16 type;
+	/** TLV length */
+	t_u16 len;
+	/** wacp_mode */
+	t_u8 wacp_mode;
+} wacp_mode_para;
 
 /** radio control command */
 #define UAP_RADIO_CTL (SIOCDEVPRIVATE + 5)

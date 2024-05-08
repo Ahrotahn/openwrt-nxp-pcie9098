@@ -57,7 +57,6 @@ CONFIG_USBIW624=n
 CONFIG_PCIEAW693=n
 
 
-
 # Debug Option
 # DEBUG LEVEL n/1/2:
 # n: NO DEBUG
@@ -104,12 +103,35 @@ CONFIG_MULTI_CHAN_SUPPORT=y
 
 CONFIG_DUMP_TO_PROC=y
 
-CONFIG_TASKLET_SUPPORT=y
+CONFIG_TASKLET_SUPPORT=n
+
 
 
 #32bit app over 64bit kernel support
 CONFIG_USERSPACE_32BIT_OVER_KERNEL_64BIT=n
 
+
+GCC_VERSION := $(shell echo `gcc -dumpversion | cut -f1-2 -d.` \>= 4.4 | sed -e 's/\./*100+/g' | bc )
+ifeq ($(GCC_VERSION),1)
+        ccflags-y += -Wno-packed-bitfield-compat
+endif
+WimpGCC_VERSION := $(shell echo `gcc -dumpversion | cut -f1 -d.`| bc )
+ifeq ($(shell test $(WimpGCC_VERSION) -ge 7; echo $$?),0)
+ccflags-y += -Wimplicit-fallthrough=3
+endif
+#ccflags-y += -Wunused-but-set-variable
+#ccflags-y += -Wmissing-prototypes
+#ccflags-y += -Wold-style-definition
+#ccflags-y += -Wtype-limits
+#ccflags-y += -Wsuggest-attribute=format
+#ccflags-y += -Wmissing-include-dirs
+#ccflags-y += -Wshadow
+#ccflags-y += -Wsign-compare
+#ccflags-y += -Wunused-macros
+#ccflags-y += -Wmissing-field-initializers
+#ccflags-y += -Wstringop-truncation
+#ccflags-y += -Wmisleading-indentation
+#ccflags-y += -Wunused-const-variable
 
 #############################################################################
 # Select Platform Tools
@@ -132,6 +154,25 @@ ifneq ($(ANDROID_PRODUCT_OUT),)
 ccflags-y += -DIMX_ANDROID
 ccflags-y += -Wno-implicit-fallthrough
 CONFIG_ANDROID_KERNEL=y
+#Automatically determine Android version from build information to streamline BSP code handling.
+ifeq ($(ANDROID_PRODUCT_OUT),1)
+ccflags-y += -DANDROID_SDK_VERSION=$(ANDROID_SDK_VERSION)
+else
+include $(ANDROID_BUILD_TOP)/build/make/core/build_id.mk
+ifeq ($(shell echo "$(BUILD_ID)" | cut -c1),R)
+      ccflags-y += -DANDROID_SDK_VERSION=30
+else ifeq ($(shell echo "$(BUILD_ID)" | cut -c1),S)
+      ccflags-y += -DANDROID_SDK_VERSION=31
+else ifeq ($(shell echo "$(BUILD_ID)" | cut -c1),T)
+      ccflags-y += -DANDROID_SDK_VERSION=33
+else ifeq ($(shell echo "$(BUILD_ID)" | cut -c1),U)
+      ccflags-y += -DANDROID_SDK_VERSION=34
+else
+    # Default optimization or actions
+      ANDROID_SDK_VERSION := 0
+      ccflags-y += -DANDROID_SDK_VERSION
+endif
+endif
 endif
 endif
 
@@ -145,7 +186,7 @@ APPDIR= $(shell if test -d "mapp"; then echo mapp; fi)
 #############################################################################
 
 	ccflags-y += -I$(KERNELDIR)/include
-	ccflags-y += -DMLAN_RELEASE_VERSION='"437.p3"'
+	ccflags-y += -DMLAN_RELEASE_VERSION='"437.p18"'
 
 	ccflags-y += -DFPNUM='"92"'
 
@@ -266,6 +307,10 @@ ifeq ($(CONFIG_SDIW624),y)
 	CONFIG_SDIO=y
 	ccflags-y += -DSDIW624
 endif
+ifeq ($(CONFIG_SDAW693),y)
+	CONFIG_SDIO=y
+	ccflags-y += -DSDAW693
+endif
 ifeq ($(CONFIG_SD9177),y)
 	CONFIG_SDIO=y
 	ccflags-y += -DSD9177
@@ -326,6 +371,10 @@ ifeq ($(CONFIG_PCIEIW624),y)
 	CONFIG_PCIE=y
 	ccflags-y += -DPCIEIW624
 endif
+ifeq ($(CONFIG_PCIEAW693),y)
+	CONFIG_PCIE=y
+	ccflags-y += -DPCIEAW693
+endif
 ifeq ($(CONFIG_SDIO),y)
 	ccflags-y += -DSDIO
 	ccflags-y += -DSDIO_MMC
@@ -347,28 +396,6 @@ ifeq ($(CONFIG_MAC80211_SUPPORT_MESH),y)
 	ccflags-y += -DMAC80211_SUPPORT_MESH
 endif
 
-# add -Wno-packed-bitfield-compat when GCC version greater than 4.4
-GCC_VERSION := $(shell echo `gcc -dumpversion | cut -f1-2 -d.` \>= 4.4 | sed -e 's/\./*100+/g' | bc )
-ifeq ($(GCC_VERSION),1)
-	ccflags-y += -Wno-packed-bitfield-compat
-endif
-WimpGCC_VERSION := $(shell echo `gcc -dumpversion | cut -f1 -d.`| bc )
-ifeq ($(shell test $(WimpGCC_VERSION) -ge 7; echo $$?),0)
-ccflags-y += -Wimplicit-fallthrough=3
-endif
-#ccflags-y += -Wunused-but-set-variable
-#ccflags-y += -Wmissing-prototypes
-#ccflags-y += -Wold-style-definition
-#ccflags-y += -Wtype-limits
-#ccflags-y += -Wsuggest-attribute=format
-#ccflags-y += -Wmissing-include-dirs
-#ccflags-y += -Wshadow
-#ccflags-y += -Wsign-compare
-#ccflags-y += -Wunused-macros
-#ccflags-y += -Wmissing-field-initializers
-#ccflags-y += -Wstringop-truncation
-#ccflags-y += -Wmisleading-indentation
-#ccflags-y += -Wunused-const-variable
 #############################################################################
 # Make Targets
 #############################################################################

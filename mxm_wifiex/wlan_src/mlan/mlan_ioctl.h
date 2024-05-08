@@ -489,6 +489,21 @@ typedef MLAN_PACK_START struct _tx_status_event {
 	t_u8 status;
 } MLAN_PACK_END tx_status_event;
 
+typedef MLAN_PACK_START struct _tx_mgmt_status_event {
+	/** packet type */
+	t_u8 packet_type;
+	/** tx_token_id */
+	t_u8 tx_token_id;
+	/** 0--success, 1--fail, 2--watchdogtimeout */
+	t_u8 status;
+} MLAN_PACK_END tx_mgmt_status_event;
+
+typedef MLAN_PACK_START struct _tx_bulk_status_event {
+	/* bulk event is multi set for tx_status [bulk1 bulk2 ...bulk128]
+     bulk1 { packet_type, tx_token_id, status } so on.
+  */
+	tx_mgmt_status_event bulk_events[128];
+} MLAN_PACK_END tx_bulk_status_event;
 /**
  *  Sructure to retrieve the scan table
  */
@@ -724,7 +739,7 @@ typedef struct _mlan_chan_list {
 #define CHAN_FLAGS_MAX MBIT(31)
 
 /** Maximum response buffer length */
-#define ASSOC_RSP_BUF_SIZE 500
+#define ASSOC_RSP_BUF_SIZE 2060
 
 /** Type definition of mlan_ds_misc_assoc_rsp for MLAN_OID_MISC_ASSOC_RSP */
 typedef struct _mlan_ds_misc_assoc_rsp {
@@ -4010,6 +4025,7 @@ typedef struct _mlan_ds_11ax_cfg {
 #define MLAN_11AX_TWT_SETUP_SUBID 0x114
 #define MLAN_11AX_TWT_TEARDOWN_SUBID 0x115
 #define MLAN_11AX_TWT_REPORT_SUBID 0x116
+#define MLAN_11AX_TWT_INFORMATION_SUBID 0x119
 
 #define MRVL_DOT11AX_ENABLE_SR_TLV_ID (PROPRIETARY_TLV_BASE_ID + 322)
 #define MRVL_DOT11AX_OBSS_PD_OFFSET_TLV_ID (PROPRIETARY_TLV_BASE_ID + 323)
@@ -4187,6 +4203,18 @@ typedef MLAN_PACK_START struct _mlan_ds_twt_report {
 	t_u8 data[36];
 } MLAN_PACK_END mlan_ds_twt_report, *pmlan_ds_twt_report;
 
+/** Type definition of mlan_ds_twt_information for MLAN_OID_11AX_TWT_CFG */
+typedef struct MLAN_PACK_START _mlan_ds_twt_information {
+	/** TWT Flow Identifier. Range: [0-7] */
+	t_u8 flow_identifier;
+	/** Suspend Duration. Range: [0-UINT32_MAX]
+	 * 0:Suspend forever;
+	 * Else:Suspend agreement for specific duration in milli seconds,
+	 * 		after than resume the agreement and enter SP immediately
+	 */
+	t_u32 suspend_duration;
+} MLAN_PACK_END mlan_ds_twt_information, *pmlan_ds_twt_information;
+
 /** Type definition of mlan_ds_twtcfg for MLAN_OID_11AX_TWT_CFG */
 typedef struct MLAN_PACK_START _mlan_ds_twtcfg {
 	/** Sub-command */
@@ -4202,6 +4230,10 @@ typedef struct MLAN_PACK_START _mlan_ds_twtcfg {
 		mlan_ds_twt_teardown twt_teardown;
 		/** TWT report for Sub ID: MLAN_11AX_TWT_REPORT_SUBID */
 		mlan_ds_twt_report twt_report;
+		/** TWT Information config for Sub ID:
+		 * MLAN_11AX_TWT_INFORMATION_SUBID
+		 */
+		mlan_ds_twt_information twt_information;
 	} param;
 } MLAN_PACK_END mlan_ds_twtcfg, *pmlan_ds_twtcfg;
 
@@ -4281,14 +4313,16 @@ enum _mlan_reg_type {
 	MLAN_REG_BCA = 7,
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097) ||          \
-	defined(SD9177) || defined(SDIW615) || defined(USBIW615)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097) || defined(SD9177) ||             \
+	defined(SDIW615) || defined(USBIW615)
 	MLAN_REG_CIU = 8,
 #endif
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097) ||          \
-	defined(SDIW615) || defined(USBIW615)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097) || defined(SDIW615) ||            \
+	defined(USBIW615)
 	MLAN_REG_MAC2 = 0x81,
 	MLAN_REG_BBP2 = 0x82,
 	MLAN_REG_RF2 = 0x83,
@@ -5068,7 +5102,7 @@ typedef MLAN_PACK_START struct _mlan_ds_drcs_cfg {
 	/** Channel swith time (in TU) for chan_idx */
 	t_u8 switchtime;
 	/** Undoze time (in TU) for chan_idx */
-	t_u8 undozetime;
+	t_u8 rx_wait_time;
 	/** Rx traffic control scheme when channel switch*/
 	/** only valid for GC/STA interface*/
 	t_u8 mode;
@@ -5829,7 +5863,9 @@ struct MLAN_PACK_START mfg_cmd_tx_frame2 {
 	/** STBC */
 	t_u32 stbc;
 	/** power id */
-	t_u32 rsvd[2];
+	t_u32 rsvd[1];
+	/**signal bw*/
+	t_u32 signal_bw;
 	/** NumPkt */
 	t_u32 NumPkt;
 	/** MaxPE */

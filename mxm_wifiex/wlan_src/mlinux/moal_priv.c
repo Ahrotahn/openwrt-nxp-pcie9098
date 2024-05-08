@@ -3,7 +3,7 @@
  * @brief This file contains standard ioctl functions
  *
  *
- * Copyright 2008-2021 NXP
+ * Copyright 2008-2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -75,7 +75,7 @@ static t_u8 SupportedInfraBand[] = {
  */
 static int woal_associate_ssid_bssid(moal_private *priv, struct iwreq *wrq)
 {
-	mlan_ssid_bssid ssid_bssid;
+	mlan_ssid_bssid *ssid_bssid = NULL;
 #ifdef REASSOCIATION
 	mlan_bss_info bss_info;
 #endif
@@ -86,7 +86,12 @@ static int woal_associate_ssid_bssid(moal_private *priv, struct iwreq *wrq)
 
 	ENTER();
 
-	memset(&ssid_bssid, 0, sizeof(ssid_bssid));
+	ssid_bssid = kzalloc(sizeof(mlan_ssid_bssid), GFP_ATOMIC);
+	if (!ssid_bssid) {
+		PRINTM(MERROR, "Fail to allocate ssid_bssid buffer\n");
+		LEAVE();
+		return -ENOMEM;
+	}
 	mac_idx = 0;
 	buflen = MIN(wrq->u.data.length, (sizeof(buf) - 1));
 	memset(buf, 0, sizeof(buf));
@@ -94,7 +99,7 @@ static int woal_associate_ssid_bssid(moal_private *priv, struct iwreq *wrq)
 	if (buflen < (3 * ETH_ALEN) + 2) {
 		PRINTM(MERROR,
 		       "Associate: Insufficient length in IOCTL input\n");
-
+		kfree(ssid_bssid);
 		/* buffer should be at least 3 characters per BSSID octet "00:"
 		**   plus a space separater and at least 1 char in the SSID
 		*/
@@ -105,6 +110,7 @@ static int woal_associate_ssid_bssid(moal_private *priv, struct iwreq *wrq)
 	if (copy_from_user(buf, wrq->u.data.pointer, buflen) != 0) {
 		/* copy_from_user failed  */
 		PRINTM(MERROR, "Associate: copy from user failed\n");
+		kfree(ssid_bssid);
 		LEAVE();
 		return -EINVAL;
 	}
@@ -118,9 +124,11 @@ static int woal_associate_ssid_bssid(moal_private *priv, struct iwreq *wrq)
 		if (buf[i] == ':') {
 			mac_idx++;
 		} else {
-			if (mac_idx < ETH_ALEN)
-				ssid_bssid.bssid[mac_idx] =
+			if (mac_idx < ETH_ALEN) {
+				// coverity[tainted_data: SUPPRESS]
+				ssid_bssid->bssid[mac_idx] =
 					(t_u8)woal_atox(buf + i);
+			}
 
 			while ((i < buflen) && (isxdigit(buf[i + 1]))) {
 				/* Skip entire hex value */
@@ -133,17 +141,18 @@ static int woal_associate_ssid_bssid(moal_private *priv, struct iwreq *wrq)
 	i++;
 
 	/* Copy the SSID */
-	ssid_bssid.ssid.ssid_len = buflen - i - 1;
-	moal_memcpy_ext(priv->phandle, ssid_bssid.ssid.ssid, buf + i,
-			sizeof(ssid_bssid.ssid.ssid),
-			sizeof(ssid_bssid.ssid.ssid));
+	ssid_bssid->ssid.ssid_len = buflen - i - 1;
+	moal_memcpy_ext(priv->phandle, ssid_bssid->ssid.ssid, buf + i,
+			sizeof(ssid_bssid->ssid.ssid),
+			sizeof(ssid_bssid->ssid.ssid));
 
 	PRINTM(MCMND, "iwpriv assoc: AP=[" MACSTR "], ssid(%d)=[%s]\n",
-	       MAC2STR(ssid_bssid.bssid), (int)ssid_bssid.ssid.ssid_len,
-	       ssid_bssid.ssid.ssid);
+	       MAC2STR(ssid_bssid->bssid), (int)ssid_bssid->ssid.ssid_len,
+	       ssid_bssid->ssid.ssid);
 
 	if (MLAN_STATUS_SUCCESS !=
-	    woal_bss_start(priv, MOAL_IOCTL_WAIT, &ssid_bssid)) {
+	    woal_bss_start(priv, MOAL_IOCTL_WAIT, ssid_bssid)) {
+		kfree(ssid_bssid);
 		LEAVE();
 		return -EFAULT;
 	}
@@ -160,7 +169,7 @@ static int woal_associate_ssid_bssid(moal_private *priv, struct iwreq *wrq)
 				sizeof(mlan_802_11_mac_addr));
 	}
 #endif /* REASSOCIATION */
-
+	kfree(ssid_bssid);
 	LEAVE();
 	return 0;
 }

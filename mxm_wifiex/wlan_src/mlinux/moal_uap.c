@@ -4,7 +4,7 @@
  * driver.
  *
  *
- * Copyright 2008-2022 NXP
+ * Copyright 2008-2022, 2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -2550,6 +2550,80 @@ done:
 }
 
 /**
+ * @brief Set/Get wacp_mode
+ *
+ *  @param dev      A pointer to net_device structure
+ *  @param req      A pointer to ifreq structure
+ *
+ * @return           0 --success, otherwise fail
+ */
+int woal_uap_wacp_mode(struct net_device *dev, struct ifreq *req)
+{
+	moal_private *priv = (moal_private *)netdev_priv(dev);
+	mlan_ioctl_req *ioctl_req = NULL;
+	mlan_ds_misc_cfg *pcfg_misc = NULL;
+	wacp_mode_para param;
+	int ret = 0;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+
+	ENTER();
+
+	/* Sanity check */
+	if (req->ifr_data == NULL) {
+		PRINTM(MERROR, "woal_uap_wacp_mode() corrupt data\n");
+		ret = -EFAULT;
+		goto done;
+	}
+	memset(&param, 0, sizeof(wacp_mode_para));
+	/* Get user data */
+	if (copy_from_user(&param, req->ifr_data, sizeof(wacp_mode_para))) {
+		PRINTM(MERROR, "Copy from user failed\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	/* Allocate an IOCTL request buffer */
+	ioctl_req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_misc_cfg));
+	if (ioctl_req == NULL) {
+		status = MLAN_STATUS_FAILURE;
+		goto done;
+	}
+
+	/* Fill request buffer */
+	pcfg_misc = (mlan_ds_misc_cfg *)ioctl_req->pbuf;
+	pcfg_misc->sub_command = MLAN_OID_MISC_WACP_MODE;
+	ioctl_req->req_id = MLAN_IOCTL_MISC_CFG;
+	ioctl_req->action = param.action;
+	pcfg_misc->param.wacp_mode = param.wacp_mode;
+
+	/* Send IOCTL request to MLAN */
+	status = woal_request_ioctl(priv, ioctl_req, MOAL_IOCTL_WAIT);
+	if (status != MLAN_STATUS_SUCCESS) {
+		ret = -EFAULT;
+		goto done;
+	}
+
+	param.wacp_mode = pcfg_misc->param.wacp_mode;
+	/** Update the moal wacp_mode */
+	if (param.action == MLAN_ACT_SET) {
+		priv->phandle->params.wacp_mode = param.wacp_mode;
+	}
+
+	/* Copy to user */
+	if (copy_to_user(req->ifr_data, &param, sizeof(param))) {
+		PRINTM(MERROR, "Copy to user failed!\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+done:
+	if (status != MLAN_STATUS_PENDING)
+		kfree(ioctl_req);
+	LEAVE();
+	return ret;
+}
+
+/**
  *  @brief uap ioctl handler
  *
  *  @param dev      A pointer to net_device structure
@@ -2654,6 +2728,9 @@ static int woal_uap_ioctl(struct net_device *dev, struct ifreq *req)
 		break;
 	case UAP_BEACON_STUCK_DETECT:
 		ret = woal_uap_beacon_stuck(dev, req);
+		break;
+	case UAP_WACP_MODE:
+		woal_uap_wacp_mode(dev, req);
 		break;
 	default:
 		break;

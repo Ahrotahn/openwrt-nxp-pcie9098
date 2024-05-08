@@ -156,10 +156,11 @@ static int rps = 0;
 
 /**
  * rps cpu mask
- * rps can be configure to any value between 0x1 - 0xf
+ * rps can be configure to any value between 0x1 - 0xff
  * ex: value of 0x3(0011) indicates to use cpu-0 and cpu-1
+ * ex: value of 0x3f(11 1111) indicates to use cpu-0 and cpu-5
  */
-#define RPS_CPU_MASK 0xf
+#define RPS_CPU_MASK 0xff
 #endif
 #endif
 
@@ -365,6 +366,9 @@ static card_type_entry card_type_map_tbl[] = {
 #ifdef SDIW624
 	{CARD_TYPE_SDIW624, 0, CARD_SDIW624},
 #endif
+#ifdef SDAW693
+	{CARD_TYPE_SDAW693, 0, CARD_SDAW693},
+#endif
 #ifdef SDIW615
 	{CARD_TYPE_SDIW615, 0, CARD_SDIW615},
 #endif
@@ -379,6 +383,9 @@ static card_type_entry card_type_map_tbl[] = {
 #endif
 #ifdef PCIE9098
 	{CARD_TYPE_PCIE9098, 0, CARD_PCIE9098},
+#endif
+#ifdef PCIEAW693
+	{CARD_TYPE_PCIEAW693, 0, CARD_PCIEAW693},
 #endif
 #ifdef PCIEIW624
 	{CARD_TYPE_PCIEIW624, 0, CARD_PCIEIW624},

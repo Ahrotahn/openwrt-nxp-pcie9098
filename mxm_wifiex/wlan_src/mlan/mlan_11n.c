@@ -1469,7 +1469,8 @@ void wlan_fill_ht_cap_tlv(mlan_private *priv, MrvlIETypes_HTCap_t *pht_cap,
 	rx_mcs_supp = GET_RXMCSSUPP(priv->usr_dev_mcs_support);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	if (IS_CARD9098(pmadapter->card_type) ||
 	    IS_CARDIW624(pmadapter->card_type) ||
 	    IS_CARD9097(pmadapter->card_type) ||
@@ -1547,7 +1548,8 @@ void wlan_fill_ht_cap_ie(mlan_private *priv, IEEEtypes_HTCap_t *pht_cap,
 	rx_mcs_supp = GET_RXMCSSUPP(priv->usr_dev_mcs_support);
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
-	defined(PCIEIW624) || defined(USBIW624) || defined(SD9097)
+	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
+	defined(USBIW624) || defined(SD9097)
 	if (IS_CARD9098(pmadapter->card_type) ||
 	    IS_CARDIW624(pmadapter->card_type) ||
 	    IS_CARD9097(pmadapter->card_type) ||

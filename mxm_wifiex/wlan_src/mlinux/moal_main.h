@@ -3,7 +3,7 @@
  * @brief This file contains wlan driver specific defines etc.
  *
  *
- * Copyright 2008-2023 NXP
+ * Copyright 2008-2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -44,6 +44,8 @@ Change log:
 #include <linux/mm.h>
 #include <linux/types.h>
 #include <linux/sched.h>
+#include <linux/ip.h>
+#include <linux/ipv6.h>
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 17)
 #include <uapi/linux/sched/types.h>
 #endif
@@ -1375,7 +1377,7 @@ struct rf_test_mode_data {
 	/* Tx continuous config values */
 	t_u32 tx_cont_data[6];
 	/* Tx frame config values */
-	t_u32 tx_frame_data[20];
+	t_u32 tx_frame_data[22];
 	/* HE TB Tx values */
 	t_u32 he_tb_tx[4];
 	t_s32 he_tb_tx_power[1];
@@ -1453,6 +1455,7 @@ typedef struct _auto_zero_dfs_cfg {
 } __ATTRIB_PACK__ auto_zero_dfs_cfg;
 
 #if defined(UAP_CFG80211) || defined(STA_CFG80211)
+/** station node */
 typedef struct _station_node {
 	/** station aid */
 	t_u16 aid;
@@ -1463,6 +1466,71 @@ typedef struct _station_node {
 	/** is valid flag */
 	t_u8 is_valid;
 } station_node;
+
+/** dhcp discover info */
+struct dhcp_discover_info {
+	/** link */
+	struct list_head link;
+	/** transaction id */
+	t_u32 transaction_id;
+	/** Time stamp when packet is received (seconds) */
+	t_u32 in_ts_sec;
+	/** Time stamp when packet is received (micro seconds) */
+	t_u32 in_ts_usec;
+};
+
+#define UDP_PSEUDO_HEADER_SIZE 12
+#define DHCP_ETH_HEADER_SIZE 14
+#define DHCP_MIN_IP_HEADER_SIZE 20
+#define DHCP_UDP_HEADER_SIZE 8
+#define DHCP_IP_PROTO 0x0800
+#define DHCP_IP_VERSION 0x04
+#define DHCP_IP_TOS 0x00
+#define DHCP_IP_TTL 0x40
+#define DHCP_UDP_PROTO 0x11
+#define DHCP_IPADDR_SIZE 4
+#define DHCP_SRC_PORT 0x0044
+#define DHCP_DST_PORT 0x0043
+
+struct dhcp_pkt {
+	/** DHCP op code or message type */
+	t_u8 op;
+	/** Hardware address type */
+	t_u8 htype;
+	/** Hardware address length */
+	t_u8 hlen;
+	/** Hops is optionally used by relay agents */
+	t_u8 hops;
+	/** Transaction identifier */
+	t_u32 xid;
+	/** Seconds till the client has started the DHCP process */
+	t_u16 secs;
+	/** Flags */
+	t_u16 flags;
+	/**
+	 * IP address of the client  Only filled in if
+	 * the client is in BOUND, RENEW or REBINDING
+	 */
+	t_u32 ciaddr;
+	/**
+	 * Your IP address offered to the client.
+	 * Sent  by server during the DISCOVER and ACK
+	 */
+	t_u32 yiaddr;
+	/**
+	 *  IP address of the DHCP server to use next.
+	 */
+	t_u32 siaddr;
+	/** Relay agent IP address */
+	t_u32 giaddr;
+	t_u8 chaddr[16];
+	/** Null terminated server host name */
+	t_u8 sname[64];
+	t_u8 file[128];
+	/** BOOTP magic cookie */
+	t_u32 magic;
+	t_u8 pOptions[1];
+} __ATTRIB_PACK__;
 
 #define EASY_MESH_MULTI_AP_FH_BSS (t_u8)(0x20)
 #define EASY_MESH_MULTI_AP_BH_BSS (t_u8)(0x40)
@@ -1865,6 +1933,10 @@ struct _moal_private {
 	moal_private *parent_priv;
 #endif
 #endif
+	/** dhcp discover lock*/
+	spinlock_t dhcp_discover_lock;
+	/** DHCP DISCOVER Info queue */
+	struct list_head dhcp_discover_queue;
 	/** txwatchdog disable */
 	t_u8 txwatchdog_disable;
 
@@ -3066,10 +3138,8 @@ struct _moal_handle {
 	BOOLEAN is_tp_acnt_timer_set;
 
 	t_u8 request_pm;
-#ifdef IMX_SUPPORT
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 35)
 	struct pm_qos_request woal_pm_qos_req;
-#endif
 #endif
 	t_u32 ips_ctrl;
 	BOOLEAN is_edmac_enabled;
@@ -3242,6 +3312,12 @@ extern t_u32 drvdbg;
 	} while (0)
 #endif /* DEBUG_LEVEL2 */
 
+#define PRINTM_MFWDP_D(level, msg...)                                          \
+	do {                                                                   \
+		woal_print(level, msg);                                        \
+		if (drvdbg & MFWDP_D)                                          \
+			printk(KERN_DEBUG msg);                                \
+	} while (0)
 #define PRINTM_MFW_D(level, msg...)                                            \
 	do {                                                                   \
 		woal_print(level, msg);                                        \
@@ -3855,6 +3931,8 @@ void woal_dump_firmware_info(moal_handle *phandle);
 void woal_dump_firmware_info_v2(moal_handle *phandle);
 void woal_dump_firmware_info_v3(moal_handle *phandle);
 #endif /* SDIO_MMC */
+/* Print FW dumps in kernel(dmesg) log */
+t_void woal_print_firmware_dump(moal_handle *phandle, char *fwdp_fname);
 /* Store the FW dumps received from events in a file */
 void woal_store_firmware_dump(moal_handle *phandle, pmlan_event pmevent);
 void woal_send_fw_dump_complete_event(moal_private *priv);
@@ -3914,7 +3992,6 @@ mlan_status woal_get_channel_list(moal_private *priv, t_u8 wait_option,
 #endif
 mlan_status woal_11d_check_ap_channel(moal_private *priv, t_u8 wait_option,
 				      mlan_ssid_bssid *ssid_bssid);
-
 /** Set/Get retry count */
 mlan_status woal_set_get_retry(moal_private *priv, t_u32 action,
 			       t_u8 wait_option, int *value);
@@ -4231,6 +4308,12 @@ mlan_status woal_set_hotspotcfg(moal_private *priv, t_u8 wait_option,
 
 #if defined(STA_CFG80211)
 mlan_status woal_multi_ap_cfg(moal_private *priv, t_u8 wait_option, t_u8 flag);
+struct dhcp_discover_info *woal_get_dhcp_discover_info(moal_private *priv,
+						       t_u32 transaction_id);
+void woal_flush_dhcp_discover_queue(moal_private *priv);
+t_u32 woal_get_dhcp_discover_transation_id(struct sk_buff *skb);
+t_void woal_add_dhcp_discover_node(moal_private *priv, t_u32 transaction_id,
+				   mlan_buffer *pmbuf);
 #endif
 
 mlan_status woal_set_get_wowlan_config(moal_private *priv, t_u16 action,
@@ -4324,4 +4407,7 @@ t_bool woal_secure_sub(t_void *datain, t_s32 sub, t_void *dataout,
 
 mlan_status woal_edmac_cfg(moal_private *priv, t_u8 *country_code);
 
+#ifdef DUMP_TO_PROC
+void woal_print_firmware_dump_buf(t_u8 *pfd_buf, t_u64 fwdump_len);
+#endif
 #endif /* _MOAL_MAIN_H */

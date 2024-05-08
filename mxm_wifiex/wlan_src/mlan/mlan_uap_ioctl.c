@@ -3,7 +3,7 @@
  *  @brief This file contains the handling of AP mode ioctls
  *
  *
- *  Copyright 2009-2023 NXP
+ *  Copyright 2009-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -2347,6 +2347,8 @@ mlan_status wlan_ops_uap_ioctl(t_void *adapter, pmlan_ioctl_req pioctl_req)
 							   pioctl_req);
 		if (misc->sub_command == MLAN_OID_MISC_CSI)
 			status = wlan_misc_csi(pmadapter, pioctl_req);
+		if (misc->sub_command == MLAN_OID_MISC_MULTI_AP_CFG)
+			status = wlan_misc_multi_ap_cfg(pmadapter, pioctl_req);
 		break;
 	case MLAN_IOCTL_POWER_CFG:
 		power = (mlan_ds_power_cfg *)pioctl_req->pbuf;

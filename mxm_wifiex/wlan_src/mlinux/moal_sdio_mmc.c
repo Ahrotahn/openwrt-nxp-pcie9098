@@ -78,6 +78,12 @@ static moal_if_ops sdiommc_ops;
 /** Device ID for SD8987 */
 #define SD_DEVICE_ID_8987 (0x9149)
 #endif
+#ifdef SDAW693
+/** Device ID for SDAW693 */
+#define SD_DEVICE_ID_AW693_FN1 (0x0211)
+/** Device ID for SDAW693 */
+#define SD_DEVICE_ID_AW693_FN2 (0x0212)
+#endif
 #ifdef SD9098
 /** Device ID for SD9098 */
 #define SD_DEVICE_ID_9098_FN1 (0x914D)
@@ -123,6 +129,10 @@ static const struct sdio_device_id wlan_ids[] = {
 #endif
 #ifdef SD8987
 	{SDIO_DEVICE(MRVL_VENDOR_ID, SD_DEVICE_ID_8987)},
+#endif
+#ifdef SDAW693
+	{SDIO_DEVICE(NXP_VENDOR_ID, SD_DEVICE_ID_AW693_FN1)},
+	{SDIO_DEVICE(NXP_VENDOR_ID, SD_DEVICE_ID_AW693_FN2)},
 #endif
 #ifdef SD9098
 	{SDIO_DEVICE(MRVL_VENDOR_ID, SD_DEVICE_ID_9098_FN1)},
@@ -422,6 +432,21 @@ static t_u16 woal_update_card_type(t_void *card)
 			driver_version + strlen(INTF_CARDTYPE) +
 				strlen(KERN_VERSION),
 			V18, strlen(V18),
+			strlen(driver_version) -
+				(strlen(INTF_CARDTYPE) + strlen(KERN_VERSION)));
+	}
+#endif
+#ifdef SDAW693
+	if (cardp_sd->func->device == SD_DEVICE_ID_AW693_FN1 ||
+	    cardp_sd->func->device == SD_DEVICE_ID_AW693_FN2) {
+		card_type = CARD_TYPE_SDAW693;
+		moal_memcpy_ext(NULL, driver_version, CARD_SDAW693,
+				strlen(CARD_SDAW693), strlen(driver_version));
+		moal_memcpy_ext(
+			NULL,
+			driver_version + strlen(INTF_CARDTYPE) +
+				strlen(KERN_VERSION),
+			V17, strlen(V17),
 			strlen(driver_version) -
 				(strlen(INTF_CARDTYPE) + strlen(KERN_VERSION)));
 	}
@@ -1443,10 +1468,14 @@ int woal_sdio_read_write_cmd52(moal_handle *handle, int func, int reg, int val)
  */
 static t_u8 woal_sdiommc_is_second_mac(moal_handle *handle)
 {
-#if defined(SD9098)
+#if defined(SDAW693) || defined(SD9098)
 	sdio_mmc_card *card = (sdio_mmc_card *)handle->card;
 #endif
 
+#ifdef SDAW693
+	if (card->func->device == SD_DEVICE_ID_AW693_FN2)
+		return MTRUE;
+#endif
 #ifdef SD9098
 	if (card->func->device == SD_DEVICE_ID_9098_FN2)
 		return MTRUE;
@@ -1464,8 +1493,8 @@ static mlan_status woal_sdiommc_get_fw_name(moal_handle *handle)
 	t_u32 rev_id_reg = handle->card_info->rev_id_reg;
 
 #if defined(SD8987) || defined(SD8997) || defined(SD9098) ||                   \
-	defined(SD9097) || defined(SDIW624) || defined(SD8978) ||              \
-	defined(SD9177) || defined(SDIW615)
+	defined(SD9097) || defined(SDIW624) || defined(SDAW693) ||             \
+	defined(SD8978) || defined(SD9177) || defined(SDIW615)
 	t_u32 magic_reg = handle->card_info->magic_reg;
 	t_u32 magic = 0;
 	t_u32 host_strap_reg = handle->card_info->host_strap_reg;
@@ -1485,8 +1514,8 @@ static mlan_status woal_sdiommc_get_fw_name(moal_handle *handle)
 	PRINTM(MCMND, "revision_id=0x%x\n", revision_id);
 
 #if defined(SD8987) || defined(SD8997) || defined(SD9098) ||                   \
-	defined(SD9097) || defined(SDIW624) || defined(SD8978) ||              \
-	defined(SD9177) || defined(SDIW615)
+	defined(SD9097) || defined(SDIW624) || defined(SDAW693) ||             \
+	defined(SD8978) || defined(SD9177) || defined(SDIW615)
 	/** Revision ID register */
 	woal_sdiommc_read_reg(handle, magic_reg, &magic);
 	/** Revision ID register */
@@ -1648,6 +1677,20 @@ static mlan_status woal_sdiommc_get_fw_name(moal_handle *handle)
 			break;
 		default:
 			break;
+		}
+	}
+#endif
+#ifdef SDAW693
+	if (IS_SDAW693(handle->card_type)) {
+		if (magic == CHIP_MAGIC_VALUE) {
+			if (strap == CARD_TYPE_SD_UART)
+				strncpy(handle->card_info->fw_name,
+					SDUARTAW693_COMBO_FW_NAME,
+					FW_NAMW_MAX_LEN);
+			else
+				strncpy(handle->card_info->fw_name,
+					SDSDAW693_COMBO_FW_NAME,
+					FW_NAMW_MAX_LEN);
 		}
 	}
 #endif
@@ -2929,7 +2972,7 @@ static int woal_sdiommc_reset_fw(moal_handle *handle)
 		goto done;
 	}
 #if defined(SD9098) || defined(SD9097) || defined(SDIW624) ||                  \
-	defined(SD9177) || defined(SDIW615)
+	defined(SDAW693) || defined(SD9177) || defined(SDIW615)
 	if (IS_SD9098(handle->card_type) || IS_SD9097(handle->card_type) ||
 	    IS_SDIW624(handle->card_type) || IS_SD9177(handle->card_type) ||
 	    IS_SDIW615(handle->card_type) || IS_SDAW693(handle->card_type))
@@ -3062,6 +3105,17 @@ static mlan_status woal_do_sdiommc_flr(moal_handle *handle, bool prepare,
 		}
 		handle->pmlan_adapter = NULL;
 	}
+#ifdef DUMP_TO_PROC
+	if (handle->fw_dump_buf) {
+		moal_vfree(handle, handle->fw_dump_buf);
+		handle->fw_dump_buf = NULL;
+		handle->fw_dump_len = 0;
+	}
+#endif
+#ifdef SD9177
+	if (IS_SD9177(handle->card_type))
+		handle->event_fw_dump = MTRUE;
+#endif
 
 	goto exit;
 
