@@ -1,14 +1,14 @@
 ===============================================================================
 			U S E R  M A N U A L
 
- Copyright 2008-2023 NXP
+ Copyright 2008-2024 NXP
 
 
 1) FOR DRIVER BUILD
 
-	Goto source code directory wlan_src/.
+	Goto source code directory.
 	make [clean] build
-	The driver and utility binaries can be found in ../bin_xxxx directory.
+	The driver and utility binaries can be found in bin_wlan directory.
 	The driver code supports Linux kernel from 2.6.32 to 6.7.0.
 
 2) FOR DRIVER INSTALL
