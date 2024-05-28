@@ -4297,7 +4297,7 @@ static t_u8 wlan_check_scan_table_ageout(moal_private *priv)
 		return MFALSE;
 	}
 	woal_get_monotonic_time(&t);
-#define CFG80211_SCAN_RESULT_AGEOUT 10
+#define CFG80211_SCAN_RESULT_AGEOUT 20
 	if (t.time_sec >
 	    (scan_resp.age_in_secs + CFG80211_SCAN_RESULT_AGEOUT)) {
 		LEAVE();
@@ -6431,6 +6431,9 @@ int woal_cfg80211_sched_scan_start(struct wiphy *wiphy, struct net_device *dev,
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 19, 0)
 	t_u8 buf[ETH_ALEN];
 #endif
+	int index = 0;
+	int j = 0;
+	struct cfg80211_ssid *match_ssid = NULL;
 	ENTER();
 
 #ifdef UAP_CFG80211
@@ -6461,15 +6464,37 @@ int woal_cfg80211_sched_scan_start(struct wiphy *wiphy, struct net_device *dev,
 	/** We have pending scan, start bgscan later */
 	if (priv->phandle->scan_pending_on_block)
 		priv->scan_cfg.start_later = MTRUE;
-	for (i = 0; i < request->n_match_sets; i++) {
-		ssid = &request->match_sets[i].ssid;
-		strncpy(priv->scan_cfg.ssid_list[i].ssid, ssid->ssid,
+	for (i = 0; i < request->n_ssids; i++) {
+		ssid = &request->ssids[i];
+		strncpy(priv->scan_cfg.ssid_list[index].ssid, ssid->ssid,
 			ssid->ssid_len);
-		priv->scan_cfg.ssid_list[i].max_len = 0;
-		PRINTM(MIOCTL, "sched scan: ssid=%s\n", ssid->ssid);
+		if (ssid->ssid_len) {
+			priv->scan_cfg.ssid_list[index].max_len = 0;
+			index++;
+		}
+		PRINTM(MCMND, "sched scan: ssid=%s\n", ssid->ssid);
 	}
-	/** Add broadcast scan, when n_match_sets = 0 */
-	if (!request->n_match_sets)
+
+	for (i = 0; i < request->n_match_sets; i++) {
+		match_ssid = &request->match_sets[i].ssid;
+		for (j = 0; j < request->n_ssids; j++) {
+			ssid = &request->ssids[j];
+			if (ssid->ssid_len == match_ssid->ssid_len &&
+			    !strncmp(ssid->ssid, match_ssid->ssid,
+				     ssid->ssid_len))
+				break;
+		}
+		if (j == request->n_ssids) {
+			strncpy(priv->scan_cfg.ssid_list[index].ssid,
+				match_ssid->ssid, match_ssid->ssid_len);
+			priv->scan_cfg.ssid_list[index].max_len =
+				match_ssid->ssid_len;
+			index++;
+		}
+		PRINTM(MCMND, "sched scan: match_ssid=%s\n", match_ssid->ssid);
+	}
+	/** Add broadcast scan, when ssid_list is empty */
+	if (!index)
 		priv->scan_cfg.ssid_list[0].max_len = 0xff;
 	for (i = 0; i < (int)MIN(WLAN_USER_SCAN_CHAN_MAX, request->n_channels);
 	     i++) {
@@ -6671,6 +6696,8 @@ int woal_cfg80211_resume(struct wiphy *wiphy)
 #if KERNEL_VERSION(3, 2, 0) <= CFG80211_VERSION_CODE
 					woal_report_sched_scan_result(
 						handle->priv[i]);
+					woal_sched_timeout(50);
+					woal_bgscan_stop_event(handle->priv[i]);
 #endif
 					handle->priv[i]->last_event = 0;
 					PRINTM(MCMND,
@@ -6843,8 +6870,7 @@ int woal_cfg80211_suspend(struct wiphy *wiphy, struct cfg80211_wowlan *wow)
 
 	PRINTM(MCMND, "<--- Enter woal_cfg80211_suspend --->\n");
 	for (i = 0; i < MIN(handle->priv_num, MLAN_MAX_BSS_NUM); i++) {
-		if (handle->priv[i] &&
-		    (GET_BSS_ROLE(handle->priv[i]) == MLAN_BSS_ROLE_STA)) {
+		if (handle->priv[i]) {
 			if (handle->scan_request) {
 				PRINTM(MIOCTL,
 				       "Cancel pending scan in woal_cfg80211_suspend\n");
@@ -9648,10 +9674,11 @@ void woal_host_mlme_disconnect(moal_private *priv, u16 reason_code, u8 *sa)
 	ENTER();
 
 	memset(frame_buf, 0, sizeof(frame_buf));
-	mgmt->frame_control = (__force __le16)IEEE80211_STYPE_DEAUTH;
+	mgmt->frame_control =
+		(__force __le16)cpu_to_le16(IEEE80211_STYPE_DEAUTH);
 	mgmt->duration = 0;
 	mgmt->seq_ctrl = 0;
-	mgmt->u.deauth.reason_code = (__force __le16)reason_code;
+	mgmt->u.deauth.reason_code = (__force __le16)cpu_to_le16(reason_code);
 	if (GET_BSS_ROLE(priv) == MLAN_BSS_ROLE_STA) {
 		moal_memcpy_ext(priv->phandle, mgmt->da, broadcast_addr,
 				ETH_ALEN, sizeof(mgmt->da));

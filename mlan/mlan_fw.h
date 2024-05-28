@@ -3611,6 +3611,14 @@ typedef MLAN_PACK_START struct {
 	t_u32 retries_long;
 } MLAN_PACK_END mlan_wifi_rate_stat;
 
+typedef MLAN_PACK_START struct {
+	/** station count */
+	t_u16 sta_count;
+	/** channel utilization */
+	t_u16 chan_util;
+	t_u8 PAD[4];
+} MLAN_PACK_END mlan_bssload_info;
+
 /** per peer statistics */
 typedef MLAN_PACK_START struct {
 	/** peer type (AP, TDLS, GO etc.) */
@@ -3619,6 +3627,8 @@ typedef MLAN_PACK_START struct {
 	t_u8 peer_mac_address[6];
 	/** peer WIFI_CAPABILITY_XXX */
 	t_u32 capabilities;
+	/** STA count and channel utilization */
+	mlan_bssload_info bssload;
 	/** number of rates */
 	t_u32 num_rate;
 	/** per rate statistics, number of entries  = num_rate */

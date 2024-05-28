@@ -793,8 +793,7 @@ int woal_sdio_suspend(struct device *dev)
 	}
 #ifdef STA_SUPPORT
 	for (i = 0; i < MIN(handle->priv_num, MLAN_MAX_BSS_NUM); i++) {
-		if (handle->priv[i] &&
-		    (GET_BSS_ROLE(handle->priv[i]) == MLAN_BSS_ROLE_STA))
+		if (handle->priv[i])
 			woal_cancel_scan(handle->priv[i], MOAL_IOCTL_WAIT);
 	}
 #endif

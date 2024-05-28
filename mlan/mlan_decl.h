@@ -2002,6 +2002,14 @@ typedef enum {
 	WIFI_PEER_INVALID,
 } wifi_peer_type;
 
+typedef struct bssload_info {
+	/** station count */
+	t_u16 sta_count;
+	/** channel utilization */
+	t_u16 chan_util;
+	t_u8 PAD[4];
+} bssload_info_t;
+
 /** per peer statistics */
 typedef struct {
 	/** peer type (AP, TDLS, GO etc.) */
@@ -2010,6 +2018,8 @@ typedef struct {
 	t_u8 peer_mac_address[6];
 	/** peer WIFI_CAPABILITY_XXX */
 	t_u32 capabilities;
+	/** STA count and channel utilization */
+	bssload_info_t bssload;
 	/** number of rates */
 	t_u32 num_rate;
 	/** per rate statistics, number of entries  = num_rate */

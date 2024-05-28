@@ -9227,6 +9227,12 @@ static void wlan_fill_link_statistic(mlan_private *priv,
 			   iface_stat->peer_info[peerIdx].peer_mac_address,
 			   fw_ifaceStat->peer_info[peerIdx].peer_mac_address,
 			   MLAN_MAC_ADDR_LENGTH, MLAN_MAC_ADDR_LENGTH);
+		iface_stat->peer_info[peerIdx].bssload.sta_count =
+			wlan_le16_to_cpu(fw_ifaceStat->peer_info[peerIdx]
+						 .bssload.sta_count);
+		iface_stat->peer_info[peerIdx].bssload.chan_util =
+			wlan_le16_to_cpu(fw_ifaceStat->peer_info[peerIdx]
+						 .bssload.chan_util);
 		iface_stat->peer_info[peerIdx].capabilities = wlan_le32_to_cpu(
 			fw_ifaceStat->peer_info[peerIdx].capabilities);
 		iface_stat->peer_info[peerIdx].num_rate = wlan_le32_to_cpu(

@@ -799,6 +799,7 @@ typedef struct _tidTbl {
 
 /** Highest priority setting for a packet (uses voice AC) */
 #define WMM_HIGHEST_PRIORITY 7
+#define WMM_SECOND_HIGHEST_PRIORITY 6
 /** Highest priority TID  */
 #define HIGH_PRIO_TID 7
 /** Lowest priority TID  */
@@ -2637,9 +2638,6 @@ struct _mlan_adapter {
 	t_u32 num_in_chan_stats;
 	/** index of chan stats */
 	t_u32 idx_chan_stats;
-	ChanStatistics_t *pold_chan_stats;
-	/** index of chan stats */
-	t_u32 old_idx_chan_stats;
 	t_u8 bgscan_reported;
 
 	/** Number of records in the scan table */
@@ -2925,6 +2923,8 @@ struct _mlan_adapter {
 	t_u16 flush_time_ac_vi_vo;
 	/** remain_on_channel flag */
 	t_u8 remain_on_channel;
+	t_u8 llde_enabled;
+	t_u8 llde_mode;
 };
 
 /** Check if stream 2X2 enabled */
@@ -2943,6 +2943,8 @@ struct _mlan_adapter {
 #define MLAN_ETHER_PKT_TYPE_WAPI (0x88B4)
 /** Ethernet packet type for IP */
 #define MLAN_ETHER_PKT_TYPE_IP (0x0800)
+/** Ethernet packet type for 1905.1a (EASYMESH) */
+#define MLAN_ETHER_PKT_TYPE_1905 (0x893a)
 /** Ethernet packet type offset */
 #define MLAN_ETHER_PKT_TYPE_OFFSET (12)
 

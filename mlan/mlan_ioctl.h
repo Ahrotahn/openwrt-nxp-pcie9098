@@ -4012,6 +4012,7 @@ typedef struct _mlan_ds_11ax_cfg {
 #define MLAN_11AXCMD_CFG_ID_OBSSNBRU_TOLTIME 7
 #define MLAN_11AXCMD_CFG_ID_SET_BSRP 8
 #define MLAN_11AXCMD_CFG_ID_LLDE 9
+#define MLAN_11AXCMD_CFG_ID_RUTXPWR 10
 
 #define MLAN_11AXCMD_SR_SUBID 0x102
 #define MLAN_11AXCMD_BEAM_SUBID 0x103
@@ -4021,6 +4022,7 @@ typedef struct _mlan_ds_11ax_cfg {
 #define MLAN_11AXCMD_TXOPRTS_SUBID 0x108
 #define MLAN_11AXCMD_SET_BSRP_SUBID 0x109
 #define MLAN_11AXCMD_LLDE_SUBID 0x110
+#define MLAN_11AXCMD_RUTXSUBPWR_SUBID 0x118
 
 #define MLAN_11AX_TWT_SETUP_SUBID 0x114
 #define MLAN_11AX_TWT_TEARDOWN_SUBID 0x115
@@ -4030,6 +4032,8 @@ typedef struct _mlan_ds_11ax_cfg {
 #define MRVL_DOT11AX_ENABLE_SR_TLV_ID (PROPRIETARY_TLV_BASE_ID + 322)
 #define MRVL_DOT11AX_OBSS_PD_OFFSET_TLV_ID (PROPRIETARY_TLV_BASE_ID + 323)
 #define NXP_6E_INBAND_FRAMES_TLV_ID (PROPRIETARY_TLV_BASE_ID + 345) // 0x0159
+
+#define MLAN_11AXCMD_LLDE_MODE_EVENT_DRIVEN 5
 
 /** Type definition of mlan_11axcmdcfg_obss_pd_offset for MLAN_OID_11AX_CMD_CFG
  */
@@ -4122,6 +4126,21 @@ typedef struct _mlan_ds_11ax_llde_cmd {
 	t_u16 tbppdu_datacnt;
 } mlan_ds_11ax_llde_cmd, *pmlan_ds_11ax_llde_cmd;
 
+/** Type definition of mlan_ds_11ax_rutxpwr_cmd for MLAN_OID_11AX_CMD_CFG */
+typedef struct _mlan_ds_11ax_rutxpwr_cmd {
+	/** type*/
+	t_u16 type;
+	/** length of TLV */
+	t_u16 len;
+	/** Sub-Band */
+	t_u8 subBand;
+	/** column,row are 3 for every subband table,however column are 7 for FC
+	 * and 6 for other SOCs */
+	t_u8 col;
+	/**ru tx data */
+	t_u8 rutxSubPwr[89];
+} mlan_ds_11ax_rutxpwr_cmd, *pmlan_ds_11ax_rutxpwr_cmd;
+
 /** Type definition of mlan_ds_11ax_cmd_cfg for MLAN_OID_11AX_CMD_CFG */
 typedef struct _mlan_ds_11ax_cmd_cfg {
 	/** Sub-command */
@@ -4147,6 +4166,8 @@ typedef struct _mlan_ds_11ax_cmd_cfg {
 		mlan_ds_11ax_set_bsrp_cmd setbsrp_cfg;
 		/* MLAN_11AXCMD_LLDE_SUBID */
 		mlan_ds_11ax_llde_cmd llde_cfg;
+		/* MLAN_11AXCMD_RUTXPWR_SUBID */
+		mlan_ds_11ax_rutxpwr_cmd rutxpwr_cfg;
 	} param;
 } mlan_ds_11ax_cmd_cfg, *pmlan_ds_11ax_cmd_cfg;
 

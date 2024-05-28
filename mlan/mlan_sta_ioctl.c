@@ -5414,20 +5414,10 @@ start_config:
 				pioctl_req->data_read_written =
 					sizeof(mlan_scan_resp) +
 					MLAN_SUB_COMMAND_SIZE;
-				if (pmadapter->scan_processing) {
-					pscan->param.scan_resp.pchan_stats =
-						(t_u8 *)pmadapter
-							->pold_chan_stats;
-					pscan->param.scan_resp
-						.num_in_chan_stats =
-						pmadapter->old_idx_chan_stats;
-				} else {
-					pscan->param.scan_resp.pchan_stats =
-						(t_u8 *)pmadapter->pchan_stats;
-					pscan->param.scan_resp
-						.num_in_chan_stats =
-						pmadapter->idx_chan_stats;
-				}
+				pscan->param.scan_resp.pchan_stats =
+					(t_u8 *)pmadapter->pchan_stats;
+				pscan->param.scan_resp.num_in_chan_stats =
+					pmadapter->idx_chan_stats;
 			}
 		}
 	}

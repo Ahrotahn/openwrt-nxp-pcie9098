@@ -33,7 +33,9 @@ Change log:
 #endif
 
 #include "moal_pcie.h"
-
+#ifdef UAP_SUPPORT
+#include "moal_uap.h"
+#endif
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 4, 70)
 #ifdef IMX_SUPPORT
 #include <linux/busfreq-imx.h>
@@ -760,38 +762,50 @@ static int woal_pcie_suspend(struct pci_dev *pdev, pm_message_t state)
 		ret = -EBUSY;
 		goto done;
 	}
-	for (i = 0; i < MIN(handle->priv_num, MLAN_MAX_BSS_NUM); i++) {
-		if (handle->priv[i] &&
-		    (GET_BSS_ROLE(handle->priv[i]) == MLAN_BSS_ROLE_STA))
-			woal_cancel_scan(handle->priv[i], MOAL_IOCTL_WAIT);
-	}
-	handle->suspend_fail = MFALSE;
-	memset(&pm_info, 0, sizeof(pm_info));
-#define MAX_RETRY_NUM 8
-	for (i = 0; i < MAX_RETRY_NUM; i++) {
-		if (MLAN_STATUS_SUCCESS ==
-		    woal_get_pm_info(woal_get_priv(handle, MLAN_BSS_ROLE_ANY),
-				     &pm_info)) {
-			if (pm_info.is_suspend_allowed == MTRUE)
-				break;
-			else
-				PRINTM(MMSG,
-				       "Suspend not allowed and retry again\n");
-		}
-		woal_sched_timeout(100);
-	}
-	if (pm_info.is_suspend_allowed == MFALSE) {
-		PRINTM(MMSG, "Suspend not allowed\n");
-		ret = -EBUSY;
-		goto done;
-	}
-
-	for (i = 0; i < handle->priv_num; i++)
-		netif_device_detach(handle->priv[i]->netdev);
 	if (moal_extflg_isset(handle, EXT_PM_KEEP_POWER))
 		keep_power = MTRUE;
 	else
 		keep_power = MFALSE;
+
+	for (i = 0; i < MIN(handle->priv_num, MLAN_MAX_BSS_NUM); i++) {
+		if (handle->priv[i])
+			woal_cancel_scan(handle->priv[i], MOAL_IOCTL_WAIT);
+#ifdef UAP_SUPPORT
+		if (handle->priv[i] && !keep_power &&
+		    handle->priv[i]->bss_started == MTRUE) {
+			if (woal_uap_bss_ctrl(handle->priv[i], MOAL_IOCTL_WAIT,
+					      UAP_BSS_STOP)) {
+				PRINTM(MERROR, "%s: stop uap failed \n",
+				       __func__);
+			}
+		}
+#endif
+	}
+	handle->suspend_fail = MFALSE;
+	if (keep_power) {
+		memset(&pm_info, 0, sizeof(pm_info));
+#define MAX_RETRY_NUM 8
+		for (i = 0; i < MAX_RETRY_NUM; i++) {
+			if (MLAN_STATUS_SUCCESS ==
+			    woal_get_pm_info(woal_get_priv(handle,
+							   MLAN_BSS_ROLE_ANY),
+					     &pm_info)) {
+				if (pm_info.is_suspend_allowed == MTRUE)
+					break;
+				else
+					PRINTM(MMSG,
+					       "Suspend not allowed and retry again\n");
+			}
+			woal_sched_timeout(100);
+		}
+		if (pm_info.is_suspend_allowed == MFALSE) {
+			PRINTM(MMSG, "Suspend not allowed\n");
+			ret = -EBUSY;
+			goto done;
+		}
+	}
+	for (i = 0; i < handle->priv_num; i++)
+		netif_device_detach(handle->priv[i]->netdev);
 
 	if (keep_power) {
 		/* Enable Host Sleep */
@@ -1245,6 +1259,13 @@ static irqreturn_t woal_pcie_interrupt(int irq, void *dev_id)
 		goto exit;
 	}
 	handle = card->handle;
+	/* No need to handle Interrupt during FW reload, we can safely return
+	 * success to Kernel */
+	if (handle->surprise_removed == MTRUE && handle->fw_reseting) {
+		PRINTM(MINFO, "*** SKIP INTR handling during FW reload ***\n");
+		ret = MLAN_STATUS_SUCCESS;
+		return IRQ_HANDLED;
+	}
 	PRINTM(MINFO, "*** IN PCIE IRQ ***\n");
 	handle->main_state = MOAL_RECV_INT;
 	if (handle->second_mac)

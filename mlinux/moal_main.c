@@ -8233,13 +8233,6 @@ static void woal_start_xmit(moal_private *priv, struct sk_buff *skb)
 	case MLAN_STATUS_PENDING:
 		atomic_inc(&priv->phandle->tx_pending);
 
-#ifdef UAP_SUPPORT
-#if defined(UAP_CFG80211) || defined(STA_CFG80211)
-		if (priv->wdev->iftype == NL80211_IFTYPE_AP_VLAN)
-			priv = priv->parent_priv;
-#endif
-#endif
-
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 29)
 		atomic_inc(&priv->wmm_tx_pending[index]);
 		if (atomic_read(&priv->wmm_tx_pending[index]) >=

@@ -1148,6 +1148,12 @@ mlan_status moal_send_packet_complete(t_void *pmoal, pmlan_buffer pmbuf,
 	t_u32 index = 0;
 #endif
 
+#ifdef UAP_SUPPORT
+#if defined(UAP_CFG80211) || defined(STA_CFG80211)
+	struct net_device *dev = NULL;
+#endif
+#endif
+
 	ENTER();
 	if (pmbuf && pmbuf->buf_type == MLAN_BUF_TYPE_RAW_DATA) {
 		woal_free_mlan_buffer(handle, pmbuf);
@@ -1157,6 +1163,15 @@ mlan_status moal_send_packet_complete(t_void *pmoal, pmlan_buffer pmbuf,
 	if (pmbuf) {
 		priv = woal_bss_index_to_priv(pmoal, pmbuf->bss_index);
 		skb = (struct sk_buff *)pmbuf->pdesc;
+#ifdef UAP_SUPPORT
+#if defined(UAP_CFG80211) || defined(STA_CFG80211)
+		if (priv && priv->multi_ap_flag && skb) {
+			dev = skb->dev;
+			if (dev)
+				priv = (moal_private *)netdev_priv(dev);
+		}
+#endif
+#endif
 		if (priv) {
 			woal_set_trans_start(priv->netdev);
 			if (skb) {
@@ -3552,18 +3567,6 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 				wake_up_interruptible(
 					&priv->phandle->reassoc_thread.wait_q);
 #endif
-			} else {
-#if CFG80211_VERSION_CODE > KERNEL_VERSION(2, 6, 35)
-				if (priv->mrvl_rssi_low) {
-					cfg80211_cqm_rssi_notify(
-						priv->netdev,
-						NL80211_CQM_RSSI_THRESHOLD_EVENT_LOW,
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(4, 11, 0)
-						0,
-#endif
-						GFP_KERNEL);
-				}
-#endif
 			}
 		}
 #endif
@@ -3589,6 +3592,8 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 				PRINTM(MMSG,
 				       "wlan: Report sched_scan result\n");
 				woal_report_sched_scan_result(priv);
+				woal_sched_timeout(50);
+				woal_bgscan_stop_event(priv);
 				priv->last_event = 0;
 				PRINTM(MEVENT,
 				       "Reporting Sched_Scan results\n");

@@ -2646,6 +2646,7 @@ int woal_cfg80211_del_virtual_intf(struct wiphy *wiphy,
 #endif
 
 	moal_private *vlan_priv = NULL;
+	station_node *vlan_sta_list = NULL;
 	t_u16 aid = 0;
 
 	ENTER();
@@ -2684,8 +2685,11 @@ int woal_cfg80211_del_virtual_intf(struct wiphy *wiphy,
 		vlan_priv = (moal_private *)netdev_priv(dev);
 		aid = vlan_priv->vlan_sta_ptr->aid;
 		PRINTM(MCMND, "wlan: Easymesh del Vlan aid=%d\n", aid);
-		vlan_priv->parent_priv->vlan_sta_list[(aid - 1) % MAX_STA_COUNT]
-			->is_valid = MFALSE;
+		vlan_sta_list =
+			vlan_priv->parent_priv
+				->vlan_sta_list[(aid - 1) % MAX_STA_COUNT];
+		if (vlan_sta_list)
+			vlan_sta_list->is_valid = MFALSE;
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 12, 0)
 		cfg80211_unregister_netdevice(dev);
 #else

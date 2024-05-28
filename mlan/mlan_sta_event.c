@@ -611,9 +611,15 @@ static void wlan_process_sta_tx_pause_event(pmlan_private priv,
 		}
 		if (tlv_type == TLV_TYPE_TX_PAUSE) {
 			tx_pause_tlv = (MrvlIEtypes_tx_pause_t *)tlv;
-			PRINTM(MCMND, "TxPause: " MACSTR " pause=%d, pkts=%d\n",
+			PRINTM(MCMND,
+			       "TxPause: " MACSTR
+			       " pause=%d, pkts=%d, priv->tx_pause=%d\n",
 			       MAC2STR(tx_pause_tlv->peermac),
-			       tx_pause_tlv->tx_pause, tx_pause_tlv->pkt_cnt);
+			       tx_pause_tlv->tx_pause, tx_pause_tlv->pkt_cnt,
+			       priv->tx_pause);
+			if (bssid)
+				PRINTM(MCMND, "TxPause: " MACSTR "\n",
+				       MAC2STR(bssid));
 			status = wlan_get_tdls_link_status(
 				priv, tx_pause_tlv->peermac);
 			if (status != TDLS_NOT_SETUP) {

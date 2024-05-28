@@ -1458,6 +1458,8 @@ mlan_status mlan_send_packet(t_void *padapter, pmlan_buffer pmbuf)
 	pmbuf->flags |= MLAN_BUF_FLAG_MOAL_TX_BUF;
 	pmpriv = pmadapter->priv[pmbuf->bss_index];
 
+	if (pmbuf->data_offset > UINT32_MAX - MLAN_ETHER_PKT_TYPE_OFFSET)
+		return MLAN_STATUS_FAILURE;
 	eth_type =
 		mlan_ntohs(*(t_u16 *)&pmbuf->pbuf[pmbuf->data_offset +
 						  MLAN_ETHER_PKT_TYPE_OFFSET]);
@@ -1474,8 +1476,16 @@ mlan_status mlan_send_packet(t_void *padapter, pmlan_buffer pmbuf)
 				*((t_u8 *)(pmbuf->pbuf + pmbuf->data_offset +
 					   MLAN_ETHER_PKT_TYPE_OFFSET +
 					   MLAN_IP_PROTOCOL_OFFSET));
-			if (ip_protocol == MLAN_IP_PROTOCOL_ICMP)
+			if (ip_protocol == MLAN_IP_PROTOCOL_ICMP) {
 				pmbuf->priority = WMM_HIGHEST_PRIORITY;
+				/** If LLDE Enabled, change the ICMP Prio to 6
+				 */
+				if (pmadapter->llde_enabled &&
+				    (pmadapter->llde_mode ==
+				     MLAN_11AXCMD_LLDE_MODE_EVENT_DRIVEN))
+					pmbuf->priority =
+						WMM_SECOND_HIGHEST_PRIORITY;
+			}
 		}
 	}
 #endif
@@ -1487,6 +1497,7 @@ mlan_status mlan_send_packet(t_void *padapter, pmlan_buffer pmbuf)
 	     */
 	    || (ip_protocol == MLAN_IP_PROTOCOL_ICMP) ||
 	    (eth_type == MLAN_ETHER_PKT_TYPE_TDLS_ACTION) ||
+	    (eth_type == MLAN_ETHER_PKT_TYPE_1905) ||
 	    (pmbuf->buf_type == MLAN_BUF_TYPE_RAW_DATA)
 	    /* Adding the Ucast/Mcast pkt to bypass queue when flag is set*/
 	    || (pmbuf->flags & MLAN_BUF_FLAG_MC_AGGR_PKT)
@@ -1502,10 +1513,38 @@ mlan_status mlan_send_packet(t_void *padapter, pmlan_buffer pmbuf)
 				pmbuf->flags |= MLAN_BUF_FLAG_TDLS;
 		}
 		if (eth_type == MLAN_ETHER_PKT_TYPE_EAPOL) {
+			pmbuf->priority = 7;
 			PRINTM_NETINTF(MMSG, pmpriv);
 			PRINTM(MMSG, "wlan: Send EAPOL pkt to " MACSTR "\n",
 			       MAC2STR(pmbuf->pbuf + pmbuf->data_offset));
 		}
+
+		if (eth_type == MLAN_ETHER_PKT_TYPE_1905) {
+			t_u16 msg_type = 0;
+
+			if (pmbuf->data_offset >
+			    UINT32_MAX - MLAN_ETHER_PKT_TYPE_OFFSET - 4)
+				return MLAN_STATUS_FAILURE;
+
+			msg_type = mlan_ntohs(
+				*(t_u16 *)&pmbuf
+					 ->pbuf[pmbuf->data_offset +
+						MLAN_ETHER_PKT_TYPE_OFFSET + 4]);
+
+			if (msg_type == 0x0007 || /* CMDU_TYPE_AP_AUTOCONFIGURATION_SEARCH
+						   */
+			    msg_type == 0x0008 || /* CMDU_TYPE_AP_AUTOCONFIGURATION_RESPONSE
+						   */
+			    msg_type == 0x0009) { /* CMDU_TYPE_AP_AUTOCONFIGURATION_WSC
+						   */
+				pmbuf->priority = 7;
+				PRINTM_NETINTF(MMSG, pmpriv);
+				PRINTM(MMSG,
+				       "wlan: Send 1905.1a pkt type: 0x%04x\n",
+				       msg_type);
+			}
+		}
+
 		if (pmadapter->tp_state_on)
 			pmadapter->callbacks.moal_tp_accounting(
 				pmadapter->pmoal_handle, pmbuf->pdesc, 2);

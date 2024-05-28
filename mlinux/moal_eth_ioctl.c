@@ -527,6 +527,10 @@ static int woal_setget_priv_11axcmdcfg(moal_private *priv, t_u8 *respbuf,
 		cfg->param.llde_cfg.txOpDuration = data[8];
 		cfg->param.llde_cfg.llde_ctrl = data[9];
 		break;
+	case MLAN_11AXCMD_CFG_ID_RUTXPWR:
+		cfg->sub_id = MLAN_11AXCMD_RUTXSUBPWR_SUBID;
+		break;
+
 	default:
 		PRINTM(MERROR, "unknown 11axcmd\n");
 		ret = -EFAULT;

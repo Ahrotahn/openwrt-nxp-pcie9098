@@ -933,6 +933,8 @@ mlan_status wlan_cmd_11ax_cmd(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		(mlan_ds_11ax_set_bsrp_cmd *)&ds_11ax_cmd->param;
 	mlan_ds_11ax_llde_cmd *llde_cmd =
 		(mlan_ds_11ax_llde_cmd *)&ds_11ax_cmd->param;
+	mlan_ds_11ax_rutxpwr_cmd *rutxpwr_cmd =
+		(mlan_ds_11ax_rutxpwr_cmd *)&ds_11ax_cmd->param;
 	MrvlIEtypes_Data_t *tlv = MNULL;
 
 	ENTER();
@@ -985,6 +987,12 @@ mlan_status wlan_cmd_11ax_cmd(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 			   sizeof(mlan_ds_11ax_llde_cmd));
 		cmd->size += sizeof(mlan_ds_11ax_llde_cmd);
 		break;
+	case MLAN_11AXCMD_RUTXSUBPWR_SUBID:
+		memcpy_ext(pmadapter, axcmd->val, &rutxpwr_cmd->subBand,
+			   sizeof(t_u8), sizeof(t_u8));
+		cmd->size += sizeof(t_u8);
+		break;
+
 	default:
 		PRINTM(MERROR, "Unknown subcmd %x\n", ds_11ax_cmd->sub_id);
 		break;
@@ -1068,6 +1076,13 @@ mlan_status wlan_ret_11ax_cmd(pmlan_private pmpriv, HostCmd_DS_COMMAND *resp,
 		memcpy_ext(pmadapter, &cfg->param.llde_cfg.llde, axcmd->val,
 			   sizeof(mlan_ds_11ax_llde_cmd),
 			   sizeof(mlan_ds_11ax_llde_cmd));
+		pmadapter->llde_enabled = cfg->param.llde_cfg.llde;
+		pmadapter->llde_mode = cfg->param.llde_cfg.mode;
+		break;
+	case MLAN_11AXCMD_RUTXSUBPWR_SUBID:
+		memcpy_ext(pmadapter, &cfg->param.rutxpwr_cfg, axcmd->val,
+			   sizeof(mlan_ds_11ax_rutxpwr_cmd),
+			   sizeof(mlan_ds_11ax_rutxpwr_cmd));
 		break;
 	default:
 		PRINTM(MERROR, "Unknown subcmd %x\n", axcmd->sub_id);

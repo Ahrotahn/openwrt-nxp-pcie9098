@@ -59,7 +59,7 @@
 	  auto_ds=0|1|2 <use MLAN default | enable auto deepsleep | disable auto deepsleep>
 	  ext_scan=0|1|2 <use MLAN default | Enable Extended Scan| Enable Enhanced Extended Scan>
       net_rx=0|1 <use netif_rx_ni in rx | use netif_receive_skb in rx>
-      amsdu_deaggr=0|1 <default | Try avoid buf copy in amsud deaggregation>
+      amsdu_deaggr=0|1 <buf copy in amsud deaggregation | avoid buf copy in amsud deaggregation (default)>
 
 	  ps_mode=0|1|2 <use MLAN default | enable IEEE PS mode | disable IEEE PS mode>
 	  sched_scan=0|1 <disable sched_scan | enable sched_scan default>
@@ -145,11 +145,18 @@
 	  Bit7~Bit0:mode for channel index1; 0|1 <PM1 | Null2Self>
 	roamoffload_in_hs=0|1 <always enable fw roaming (default) | enable fw roaming only when host suspend>
 	uap_max_sta: Maximum number of STA for UAP/GO (default 0, max 64)
+
+	auto_fw_reload=0|1|3 <disable|enable PCIE FLR|enable PCIE InBand Reset (default)>
+	auto_fw_reload=0|1 <disable|enable InBand Reset (default)>
+
+    dmcs=0|1 <disable (default)|enable dynamic mapping)>
+
 	host_mlme=0|1 <Operate in non-host_mlme mode | Operate in host_mlme mode (default)>
 	for supplicant/authenticator running on host side, WPA3 support is available only in host_mlme mode
 	for chipset 89xx FP-92, 90xx and later, host_mlme restricted to 1
 	country_ie_ignore=0|1 <Follow countryIE from AP and beacon hint enable (default) | Ignore countryIE from AP and beacon hint disable>
 	beacon_hints=0|1 <enable beacon hints(default) | disable beacon hints>
+	edmac_ctrl=0|1 <Disable edmac EU adaptivity (default) | Enable edmac EU adaptivity>
 
 	chan_track=0|1 <restore channel tracking parameters(default) | set channel tracking new parameters> for 9098 only
 	keep_previous_scan=0|1, <Flush previous scan result before start scan | Keep previous scan result(default)>
@@ -475,13 +482,6 @@
     echo "channel=36" > /proc/mwlan/adapter0/config
     echo "trigger_frame=1 0 1 2 5484 0 256 0 0 0 1 0 0 0 1 60 1 0 65535 0 511 5 0 61 0 0 0 0 90 0 0 0 0"  > /proc/mwlan/adapter0/config
     echo "tx_frame=1 0x1102 0xabababab 200" >/proc/mwlan/adapter0/config
-
-    OTP Read/Write
-    Example: Read OTP MAC address.
-    echo "otp_mac_add_rd_wr=0"  > /proc/mwlan/adapter0/config
-
-    Example: Write OTP MAC addres.
-    echo "otp_mac_add_rd_wr=1 AA:BB:CC:DD:EE:FF"  > /proc/mwlan/adapter0/config
 
 6) Set host sleep parameters
 

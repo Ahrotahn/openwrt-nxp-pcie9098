@@ -168,6 +168,38 @@ t_u16 radio_type_to_band(t_u8 radio_type)
  *  @brief This function will update the channel statistics from scan result
  *
  *  @param pmpriv           A pointer to mlan_private structure
+ *  @param pchan_stats      A pointer to chan_statistics_t
+ *
+ *  @return                 MTRUE/MFALSE
+ */
+static t_u8 wlan_set_chan_statistics(mlan_private *pmpriv,
+				     chan_statistics_t *pchan_stats)
+{
+	t_u8 i;
+	t_u8 ret = MFALSE;
+	mlan_adapter *pmadapter = pmpriv->adapter;
+	chan_statistics_t *pstats = MNULL;
+	ENTER();
+	for (i = 0; i < pmadapter->idx_chan_stats; i++) {
+		pstats = (chan_statistics_t *)&pmadapter->pchan_stats[i];
+		if (pstats->chan_num == pchan_stats->chan_num &&
+		    (pstats->bandcfg.chanBand ==
+		     pchan_stats->bandcfg.chanBand)) {
+			memcpy_ext(pmadapter, (chan_statistics_t *)pstats,
+				   pchan_stats, sizeof(chan_statistics_t),
+				   sizeof(chan_statistics_t));
+			ret = MTRUE;
+			break;
+		}
+	}
+	LEAVE();
+	return ret;
+}
+
+/**
+ *  @brief This function will update the channel statistics from scan result
+ *
+ *  @param pmpriv           A pointer to mlan_private structure
  *  @param pchanstats_tlv   A pointer to MrvlIEtypes_ChannelStats_t tlv
  *
  *  @return                NA
@@ -187,13 +219,6 @@ wlan_update_chan_statistics(mlan_private *pmpriv,
 	ENTER();
 
 	for (i = 0; i < num_chan; i++) {
-		if (pmadapter->idx_chan_stats >= pmadapter->num_in_chan_stats) {
-			PRINTM(MERROR,
-			       "Over flow: idx_chan_stats=%d, num_in_chan_stats=%d\n",
-			       pmadapter->idx_chan_stats,
-			       pmadapter->num_in_chan_stats);
-			break;
-		}
 		pchan_stats->total_networks =
 			wlan_le16_to_cpu(pchan_stats->total_networks);
 		pchan_stats->cca_scan_duration =
@@ -206,12 +231,24 @@ wlan_update_chan_statistics(mlan_private *pmpriv,
 		       pchan_stats->total_networks,
 		       pchan_stats->cca_scan_duration,
 		       pchan_stats->cca_busy_duration);
-		memcpy_ext(pmadapter,
-			   (chan_statistics_t *)&pmadapter
-				   ->pchan_stats[pmadapter->idx_chan_stats],
-			   pchan_stats, sizeof(chan_statistics_t),
-			   sizeof(chan_statistics_t));
-		pmadapter->idx_chan_stats++;
+		if (!wlan_set_chan_statistics(pmpriv, pchan_stats)) {
+			if (pmadapter->idx_chan_stats >=
+			    pmadapter->num_in_chan_stats) {
+				PRINTM(MERROR,
+				       "Over flow: idx_chan_stats=%d, num_in_chan_stats=%d\n",
+				       pmadapter->idx_chan_stats,
+				       pmadapter->num_in_chan_stats);
+				LEAVE();
+				return;
+			}
+			memcpy_ext(
+				pmadapter,
+				(chan_statistics_t *)&pmadapter
+					->pchan_stats[pmadapter->idx_chan_stats],
+				pchan_stats, sizeof(chan_statistics_t),
+				sizeof(chan_statistics_t));
+			pmadapter->idx_chan_stats++;
+		}
 		pchan_stats++;
 	}
 	LEAVE();
@@ -4185,7 +4222,6 @@ mlan_status wlan_scan_networks(mlan_private *pmpriv, t_void *pioctl_buf,
 	t_u8 filtered_scan;
 	t_u8 scan_current_chan_only;
 	t_u8 max_chan_per_scan;
-	t_u8 i;
 
 	ENTER();
 
@@ -4241,25 +4277,11 @@ mlan_status wlan_scan_networks(mlan_private *pmpriv, t_void *pioctl_buf,
 		keep_previous_scan = puser_scan_in->keep_previous_scan;
 
 	if (keep_previous_scan == MFALSE) {
-		memset(pmadapter, pmadapter->pscan_table, 0x00,
-		       sizeof(BSSDescriptor_t) * MRVDRV_MAX_BSSID_LIST);
-		pmadapter->num_in_scan_table = 0;
+		wlan_flush_scan_table(pmadapter);
 		pmadapter->pbcn_buf_end = pmadapter->bcn_buf;
 	} else {
 		wlan_scan_delete_ageout_entry(pmpriv);
 	}
-
-	// back up the pchan_stats before reset it
-	memset(pmadapter, pmadapter->pold_chan_stats, 0x00,
-	       sizeof(ChanStatistics_t) * pmadapter->num_in_chan_stats);
-	memcpy_ext(pmpriv->adapter, pmadapter->pold_chan_stats,
-		   pmadapter->pchan_stats,
-		   sizeof(ChanStatistics_t) * pmadapter->num_in_chan_stats,
-		   sizeof(ChanStatistics_t) * pmadapter->num_in_chan_stats);
-	pmadapter->old_idx_chan_stats = pmadapter->idx_chan_stats;
-	for (i = 0; i < pmadapter->num_in_chan_stats; i++)
-		pmadapter->pchan_stats[i].cca_scan_duration = 0;
-	pmadapter->idx_chan_stats = 0;
 
 	ret = wlan_scan_channel_list(pmpriv, pioctl_buf, max_chan_per_scan,
 				     filtered_scan, &pscan_cfg_out->config,
@@ -6453,7 +6475,7 @@ mlan_status wlan_cmd_bgscan_config(mlan_private *pmpriv,
 			    pwildcard_ssid_tlv->header.len;
 		pwildcard_ssid_tlv->header.len =
 			wlan_cpu_to_le16(pwildcard_ssid_tlv->header.len);
-		PRINTM(MINFO, "Scan: ssid_list[%d]: %s, %d\n", ssid_idx,
+		PRINTM(MCMD_D, "bgScan: ssid_list[%d]: %s, %d\n", ssid_idx,
 		       pwildcard_ssid_tlv->ssid,
 		       pwildcard_ssid_tlv->max_ssid_length);
 	}

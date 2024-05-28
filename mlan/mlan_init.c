@@ -314,20 +314,6 @@ mlan_status wlan_allocate_adapter(pmlan_adapter pmadapter)
 		LEAVE();
 		return MLAN_STATUS_FAILURE;
 	}
-	if (pmadapter->callbacks.moal_vmalloc &&
-	    pmadapter->callbacks.moal_vfree)
-		ret = pmadapter->callbacks.moal_vmalloc(
-			pmadapter->pmoal_handle, buf_size,
-			(t_u8 **)&pmadapter->pold_chan_stats);
-	else
-		ret = pmadapter->callbacks.moal_malloc(
-			pmadapter->pmoal_handle, buf_size, MLAN_MEM_DEF,
-			(t_u8 **)&pmadapter->pold_chan_stats);
-	if (ret != MLAN_STATUS_SUCCESS || !pmadapter->pold_chan_stats) {
-		PRINTM(MERROR, "Failed to allocate old channel statistics\n");
-		LEAVE();
-		return MLAN_STATUS_FAILURE;
-	}
 #endif
 
 	/* Allocate command buffer */
@@ -1808,15 +1794,6 @@ t_void wlan_free_adapter(pmlan_adapter pmadapter)
 			pcb->moal_mfree(pmadapter->pmoal_handle,
 					(t_u8 *)pmadapter->pchan_stats);
 		pmadapter->pchan_stats = MNULL;
-	}
-	if (pmadapter->pold_chan_stats) {
-		if (pcb->moal_vmalloc && pcb->moal_vfree)
-			pcb->moal_vfree(pmadapter->pmoal_handle,
-					(t_u8 *)pmadapter->pold_chan_stats);
-		else
-			pcb->moal_mfree(pmadapter->pmoal_handle,
-					(t_u8 *)pmadapter->pold_chan_stats);
-		pmadapter->pold_chan_stats = MNULL;
 	}
 	if (pmadapter->bcn_buf) {
 		if (pcb->moal_vmalloc && pcb->moal_vfree)
