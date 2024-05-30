@@ -1673,7 +1673,7 @@ static t_bool wlan_11h_is_slave_on_dfs_chan(mlan_private *priv)
  *  @return        MTRUE-dfs_master and dfs_slave interface on same DFS channel
  *
  */
-t_u8 static wlan_11h_check_dfs_channel(mlan_adapter *pmadapter)
+static t_u8 wlan_11h_check_dfs_channel(mlan_adapter *pmadapter)
 {
 	mlan_private *priv_master = MNULL;
 	mlan_private *priv_slave = MNULL;
@@ -1709,7 +1709,7 @@ t_u8 static wlan_11h_check_dfs_channel(mlan_adapter *pmadapter)
  *
  *  @return      MLAN_STATUS_SUCCESS or MLAN_STATUS_FAILURE
  */
-mlan_status static wlan_11h_disable_dfs(mlan_private *priv, t_void *pioctl_buf)
+static mlan_status wlan_11h_disable_dfs(mlan_private *priv, t_void *pioctl_buf)
 {
 	t_u32 enable = 0;
 	mlan_status ret = MLAN_STATUS_SUCCESS;

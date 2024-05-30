@@ -155,8 +155,8 @@ mlan_status parse_arguments(t_u8 *pos, int *data, int datalen,
 				is_hex = 0;
 			} else {
 				if (woal_atoi(&data[j], cdata) !=
-				    MLAN_STATUS_SUCCESS)
-					;
+				    MLAN_STATUS_SUCCESS) {
+				}
 			}
 			j++;
 			k = 0;
@@ -5134,6 +5134,7 @@ static int woal_priv_hssetpara(moal_private *priv, t_u8 *respbuf,
 	int data[15] = {0};
 	int user_data_len = 0;
 	int ret = 0;
+	t_u8 *buf = NULL;
 
 	ENTER();
 
@@ -5156,12 +5157,20 @@ static int woal_priv_hssetpara(moal_private *priv, t_u8 *respbuf,
 	}
 
 	if (user_data_len >= 1 && user_data_len <= 15) {
+		buf = kzalloc(CMD_BUF_LEN, GFP_ATOMIC);
+		if (!buf) {
+			PRINTM(MERROR, "Could not allocate buffer\n");
+			LEAVE();
+			return -ENOMEM;
+		}
+
+		memcpy(buf, respbuf + (strlen(CMD_NXP) + strlen(PRIV_CMD_HSSETPARA)),
+		       CMD_BUF_LEN - (strlen(CMD_NXP) + strlen(PRIV_CMD_HSSETPARA)));
 		snprintf(respbuf, CMD_BUF_LEN, "%s%s%s", CMD_NXP,
-			 PRIV_CMD_HSCFG,
-			 respbuf + (strlen(CMD_NXP) +
-				    strlen(PRIV_CMD_HSSETPARA)));
+			 PRIV_CMD_HSCFG, buf);
 		respbuflen = strlen(respbuf);
 		ret = woal_priv_hscfg(priv, respbuf, respbuflen, MFALSE);
+		kfree(buf);
 		goto done;
 	}
 done:
