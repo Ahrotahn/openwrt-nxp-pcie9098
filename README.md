@@ -5,7 +5,7 @@ This is a driver built to support the NXP pcie9098 card that comes with the Golb
 ## Install:
 
 ```
-opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/230128/kmod-nxp-pcie9098_v23.05.0.ipk
+opkg install http://github.com/Ahrotahn/openwrt-nxp-pcie9098/releases/download/230128/kmod-nxp-pcie9098_v23.05.4.ipk
 ```
 ```
 reboot
