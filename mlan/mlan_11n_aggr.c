@@ -3,7 +3,7 @@
  *  @brief This file contains functions for 11n Aggregation.
  *
  *
- *  Copyright 2008-2021 NXP
+ *  Copyright 2008-2021, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -114,7 +114,8 @@ static void wlan_11n_form_amsdu_txpd(mlan_private *priv, mlan_buffer *mbuf)
 	ENTER();
 
 	ptx_pd = (TxPD *)mbuf->pbuf;
-	memset(pmadapter, ptx_pd, 0, sizeof(TxPD));
+	// coverity[bad_memset:SUPPRESS]
+	memset(pmadapter, ptx_pd, 0, Tx_PD_SIZEOF(pmadapter));
 
 	/*
 	 * Original priority has been overwritten
@@ -123,7 +124,7 @@ static void wlan_11n_form_amsdu_txpd(mlan_private *priv, mlan_buffer *mbuf)
 	ptx_pd->bss_num = GET_BSS_NUM(priv);
 	ptx_pd->bss_type = priv->bss_type;
 	/* Always zero as the data is followed by TxPD */
-	ptx_pd->tx_pkt_offset = sizeof(TxPD);
+	ptx_pd->tx_pkt_offset = Tx_PD_SIZEOF(pmadapter);
 	ptx_pd->tx_pkt_type = PKT_TYPE_AMSDU;
 	if (mbuf->flags & MLAN_BUF_FLAG_TDLS)
 		ptx_pd->flags = MRVDRV_TxPD_FLAGS_TDLS_PACKET;
@@ -184,10 +185,11 @@ static t_u16 wlan_form_amsdu_txpd(mlan_private *priv, mlan_buffer *pmbuf,
 	t_u16 data_len = pmbuf->data_len;
 	ENTER();
 
-	head_ptr = pmbuf->pbuf + pmbuf->data_offset - sizeof(TxPD) -
+	head_ptr = pmbuf->pbuf + pmbuf->data_offset - Tx_PD_SIZEOF(pmadapter) -
 		   priv->intf_hr_len;
 	ptx_pd = (TxPD *)(head_ptr + priv->intf_hr_len);
-	memset(pmadapter, ptx_pd, 0, sizeof(TxPD));
+	// coverity[bad_memset:SUPPRESS]
+	memset(pmadapter, ptx_pd, 0, Tx_PD_SIZEOF(pmadapter));
 
 	/* Set the BSS number to TxPD */
 	ptx_pd->bss_num = GET_BSS_NUM(priv);
@@ -219,7 +221,7 @@ static t_u16 wlan_form_amsdu_txpd(mlan_private *priv, mlan_buffer *pmbuf,
 
 	PRINTM(MDATA, "amsdu_pkt_len=%d, extra_len=%d\n", amsdu_pkt_len,
 	       pmbuf->data_len - data_len);
-	DBG_HEXDUMP(MDAT_D, "AMSDU TxPD", ptx_pd, sizeof(TxPD));
+	DBG_HEXDUMP(MDAT_D, "AMSDU TxPD", ptx_pd, Tx_PD_SIZEOF(pmadapter));
 
 	LEAVE();
 	return (pmbuf->data_len - data_len);
@@ -302,8 +304,8 @@ static INLINE void wlan_11n_update_pktlen_amsdu_txpd(mlan_private *priv,
 	ENTER();
 
 	ptx_pd = (TxPD *)mbuf->pbuf;
-	ptx_pd->tx_pkt_length =
-		(t_u16)wlan_cpu_to_le16(mbuf->data_len - sizeof(TxPD));
+	ptx_pd->tx_pkt_length = (t_u16)wlan_cpu_to_le16(
+		mbuf->data_len - Tx_PD_SIZEOF(priv->adapter));
 	ptx_pd->pkt_delay_2ms =
 		wlan_wmm_compute_driver_packet_delay(priv, mbuf);
 
@@ -643,8 +645,9 @@ done:
  *
  *  @return     Final packet size or MLAN_STATUS_FAILURE
  */
-int wlan_send_amsdu_subframe_list(mlan_private *priv, raListTbl *pra_list,
-				  int headroom, int ptrindex)
+static int wlan_send_amsdu_subframe_list(mlan_private *priv,
+					 raListTbl *pra_list, int headroom,
+					 int ptrindex)
 {
 	int pkt_size = 0;
 	pmlan_adapter pmadapter = priv->adapter;
@@ -681,7 +684,8 @@ int wlan_send_amsdu_subframe_list(mlan_private *priv, raListTbl *pra_list,
 							&pra_list->buf_head,
 							MNULL, MNULL);
 		/* Collects TP statistics */
-		if (pmadapter->tp_state_on && (pkt_size > sizeof(TxPD)))
+		if (pmadapter->tp_state_on &&
+		    (pkt_size > Tx_PD_SIZEOF(pmadapter)))
 			pmadapter->callbacks.moal_tp_accounting(
 				pmadapter->pmoal_handle, pmbuf_src, 3);
 		pra_list->total_pkts--;
@@ -849,7 +853,7 @@ int wlan_11n_aggregate_pkt(mlan_private *priv, raListTbl *pra_list,
 		}
 		/* Form AMSDU */
 		wlan_11n_form_amsdu_txpd(priv, pmbuf_aggr);
-		pkt_size = sizeof(TxPD);
+		pkt_size = Tx_PD_SIZEOF(pmadapter);
 #ifdef STA_SUPPORT
 		if (GET_BSS_ROLE(priv) == MLAN_BSS_ROLE_STA)
 			ptx_pd = (TxPD *)pmbuf_aggr->pbuf;
@@ -868,7 +872,8 @@ int wlan_11n_aggregate_pkt(mlan_private *priv, raListTbl *pra_list,
 							&pra_list->buf_head,
 							MNULL, MNULL);
 		/* Collects TP statistics */
-		if (pmadapter->tp_state_on && (pkt_size > sizeof(TxPD)))
+		if (pmadapter->tp_state_on &&
+		    (pkt_size > Tx_PD_SIZEOF(pmadapter)))
 			pmadapter->callbacks.moal_tp_accounting(
 				pmadapter->pmoal_handle, pmbuf_src, 3);
 		pra_list->total_pkts--;
@@ -922,7 +927,8 @@ int wlan_11n_aggregate_pkt(mlan_private *priv, raListTbl *pra_list,
 	pmbuf_aggr->data_len += headroom;
 	pmbuf_aggr->pbuf = data - headroom;
 	tx_param.next_pkt_len =
-		((pmbuf_src) ? pmbuf_src->data_len + sizeof(TxPD) : 0);
+		((pmbuf_src) ? pmbuf_src->data_len + Tx_PD_SIZEOF(pmadapter) :
+			       0);
 	/* Collects TP statistics */
 	if (pmadapter->tp_state_on) {
 		pmadapter->callbacks.moal_tp_accounting(pmadapter->pmoal_handle,

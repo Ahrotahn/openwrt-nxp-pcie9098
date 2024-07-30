@@ -5312,7 +5312,7 @@ mlan_status wlan_scan_ioctl(pmlan_adapter pmadapter, pmlan_ioctl_req pioctl_req)
 		LEAVE();
 		return MLAN_STATUS_FAILURE;
 	}
-	if (pmadapter->remain_on_channel
+	if (pmadapter->remain_on_channel && pioctl_req->action == MLAN_ACT_SET
 #ifdef WIFI_DIRECT_SUPPORT
 	    && (pmpriv->bss_type != MLAN_BSS_TYPE_WIFIDIRECT)
 #endif

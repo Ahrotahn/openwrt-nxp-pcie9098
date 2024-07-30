@@ -347,7 +347,7 @@ static struct _card_info card_info_SD8978 = {
 #ifdef SD8997
 static struct _card_info card_info_SD8997 = {
 	.embedded_supp = 1,
-	.drcs = 1,
+	.drcs = 0,
 	.go_noa = 1,
 	.v16_fw_api = 1,
 	.pmic = 1,
@@ -651,7 +651,7 @@ static struct _card_info card_info_SDIW615 = {
 #ifdef PCIE8997
 static struct _card_info card_info_PCIE8997 = {
 	.embedded_supp = 1,
-	.drcs = 1,
+	.drcs = 0,
 	.go_noa = 1,
 	.v16_fw_api = 1,
 	.pmic = 1,
@@ -1239,6 +1239,13 @@ void woal_clean_up(moal_handle *handle)
 			}
 #endif
 #endif
+
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+			if (handle->is_nan_timer_set) {
+				woal_cancel_timer(&handle->nan_timer);
+				handle->is_nan_timer_set = MFALSE;
+			}
+#endif
 			// stop bgscan
 #ifdef STA_CFG80211
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)
@@ -1694,6 +1701,65 @@ done:
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0)
 #if IS_ENABLED(CONFIG_IPV6)
 /**
+ *  @brief This function deletes the IPv6 Address entry
+ *
+ *  @param priv      A pointer to moal_private structure
+ *
+ *  @return          N/A
+ */
+static void woal_remove_ipv6_address(moal_private *priv, t_u8 *addr)
+{
+	struct ipv6addr_entry *ipv6_entry = NULL, *tmp_ipv6_entry;
+	unsigned long flags;
+
+	spin_lock_irqsave(&priv->ipv6addr_lock, flags);
+	list_for_each_entry_safe (ipv6_entry, tmp_ipv6_entry,
+				  &priv->ipv6_addrses, link) {
+		if (memcmp(addr, ipv6_entry->ipv6_addr, IPADDR_LEN) == 0) {
+			priv->ipv6count -= 1;
+			list_del(&ipv6_entry->link);
+			kfree(ipv6_entry);
+			break;
+		}
+	}
+	spin_unlock_irqrestore(&priv->ipv6addr_lock, flags);
+	if (list_empty(&priv->ipv6_addrses))
+		priv->ipv6_addr_configured = MFALSE;
+}
+
+/**
+ *  @brief This function adds the IPv6 Address entry
+ *
+ *  @param priv      A pointer to moal_private structure
+ *
+ *  @return          N/A
+ */
+static void woal_add_ipv6_address(moal_private *priv, t_u8 *addr)
+{
+	struct ipv6addr_entry *pipv6_entry = NULL, *ipv6_entry = NULL;
+	unsigned long flags;
+
+	list_for_each_entry (ipv6_entry, &priv->ipv6_addrses, link) {
+		if (!memcmp(ipv6_entry->ipv6_addr, addr, IPADDR_LEN)) {
+			PRINTM(MIOCTL, "ipv6 addr already exists\n");
+			return;
+		}
+	}
+
+	pipv6_entry = kzalloc(sizeof(struct ipv6addr_entry), GFP_ATOMIC);
+	if (pipv6_entry) {
+		spin_lock_irqsave(&priv->ipv6addr_lock, flags);
+		INIT_LIST_HEAD(&pipv6_entry->link);
+		moal_memcpy_ext(priv->phandle, pipv6_entry->ipv6_addr,
+				(t_u8 *)addr, IPADDR_LEN, IPADDR_LEN);
+		list_add_tail(&pipv6_entry->link, &priv->ipv6_addrses);
+		spin_unlock_irqrestore(&priv->ipv6addr_lock, flags);
+		priv->ipv6count += 1;
+	}
+	priv->ipv6_addr_configured = MTRUE;
+}
+
+/**
  *  @brief This function handle the net interface ipv6 address change event
  *
  *  @param nb      pointer to the notifier_block
@@ -1709,7 +1775,7 @@ static int woal_inet6_netdeive_event(struct notifier_block *nb,
 	struct net_device *ndev = ifa->idev->dev;
 	moal_private *priv;
 	int ret = NOTIFY_OK;
-
+	t_u8 addr[16] = {0};
 	ENTER();
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 29)
@@ -1744,15 +1810,13 @@ static int woal_inet6_netdeive_event(struct notifier_block *nb,
 	switch (event) {
 	case NETDEV_UP:
 		PRINTM(MIOCTL, "[%s]: New ipv6 addr\n", ndev->name);
-		moal_memcpy_ext(priv->phandle, priv->ipv6_addr,
-				(t_u8 *)&ifa->addr, sizeof(priv->ipv6_addr),
-				sizeof(priv->ipv6_addr));
-		priv->ipv6_addr_configured = MTRUE;
+		moal_memcpy_ext(priv->phandle, addr, (t_u8 *)&ifa->addr,
+				sizeof(addr), sizeof(addr));
+		woal_add_ipv6_address(priv, addr);
 		break;
 	case NETDEV_DOWN:
 		PRINTM(MIOCTL, "[%s]: Ipv6 addr removed.\n", ndev->name);
-		memset(priv->ipv6_addr, 0, sizeof(priv->ipv6_addr));
-		priv->ipv6_addr_configured = MFALSE;
+		woal_remove_ipv6_address(priv, (t_u8 *)&ifa->addr);
 		break;
 	default:
 		PRINTM(MIOCTL, "[%s]: Ignore event: %u\n", ndev->name,
@@ -1792,6 +1856,37 @@ BOOLEAN woal_ssid_valid(mlan_802_11_ssid *pssid)
 #endif
 	return MTRUE;
 }
+
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+/**
+ * @brief Tx management timeout for NAN function
+ *
+ * @param context A pointer to context
+ * @return         N/A
+ */
+void woal_nan_timer_func(void *context)
+{
+	moal_handle *handle = (moal_handle *)context;
+	moal_private *priv = handle->priv[handle->remain_bss_index];
+
+	ENTER();
+
+	if (!priv->phandle->nan_cookie) {
+		PRINTM(MWARN, "NAN cookie not set\n");
+		LEAVE();
+		return;
+	}
+
+	PRINTM(MEVENT, "NAN timer started.\n");
+	cfg80211_tx_mgmt_expired(priv->wdev, priv->phandle->nan_cookie,
+				 &priv->phandle->chan, GFP_ATOMIC);
+	priv->phandle->is_nan_timer_set = MFALSE;
+	priv->phandle->nan_cookie = 0;
+
+	LEAVE();
+	return;
+}
+#endif
 
 #if defined(STA_CFG80211) || defined(UAP_CFG80211)
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)
@@ -2454,6 +2549,11 @@ mlan_status woal_init_sw(moal_handle *handle)
 			      handle);
 
 	handle->is_remain_timer_set = MFALSE;
+
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+	woal_initialize_timer(&handle->nan_timer, woal_nan_timer_func, handle);
+#endif
+
 #endif
 #endif
 
@@ -2577,6 +2677,7 @@ mlan_status woal_init_sw(moal_handle *handle)
 	device.second_mac = handle->second_mac;
 	device.antcfg = handle->params.antcfg;
 	device.dmcs = moal_extflg_isset(handle, EXT_DMCS);
+	device.reject_addba_req = handle->params.reject_addba_req;
 
 	for (i = 0; i < handle->drv_mode.intf_num; i++) {
 		device.bss_attr[i].bss_type =
@@ -5512,6 +5613,13 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 #ifdef STA_CFG80211
 #ifdef STA_SUPPORT
 	spin_lock_init(&priv->connect_lock);
+#endif
+#endif
+
+#ifdef STA_CFG80211
+#ifdef STA_SUPPORT
+	INIT_LIST_HEAD(&priv->ipv6_addrses);
+	spin_lock_init(&priv->ipv6addr_lock);
 #endif
 #endif
 
@@ -9831,6 +9939,7 @@ void woal_fw_dump_timer_func(void *context)
 	handle->is_fw_dump_timer_set = MFALSE;
 	if (handle->priv_num)
 		woal_process_hang(handle);
+	handle->fw_dump = MFALSE;
 	LEAVE();
 	return;
 }

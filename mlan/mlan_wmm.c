@@ -3,7 +3,7 @@
  *  @brief This file contains functions for WMM.
  *
  *
- *  Copyright 2008-2021 NXP
+ *  Copyright 2008-2021, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -856,7 +856,8 @@ static INLINE void wlan_send_single_packet(pmlan_private priv, raListTbl *ptr,
 			pmadapter->pmoal_handle, priv->wmm.ra_list_spinlock);
 
 		tx_param.next_pkt_len =
-			((pmbuf_next) ? pmbuf_next->data_len + sizeof(TxPD) :
+			((pmbuf_next) ? pmbuf_next->data_len +
+						Tx_PD_SIZEOF(pmadapter) :
 					0);
 		status = wlan_process_tx(priv, pmbuf, &tx_param);
 
@@ -962,7 +963,8 @@ static INLINE void wlan_send_processed_packet(pmlan_private priv,
 		pmadapter->callbacks.moal_spin_unlock(
 			pmadapter->pmoal_handle, priv->wmm.ra_list_spinlock);
 		tx_param.next_pkt_len =
-			((pmbuf_next) ? pmbuf_next->data_len + sizeof(TxPD) :
+			((pmbuf_next) ? pmbuf_next->data_len +
+						Tx_PD_SIZEOF(pmadapter) :
 					0);
 
 		ret = pmadapter->ops.host_to_card(priv, MLAN_TYPE_DATA, pmbuf,
@@ -1007,10 +1009,10 @@ static INLINE void wlan_send_processed_packet(pmlan_private priv,
 		case MLAN_STATUS_PENDING:
 			break;
 		case MLAN_STATUS_SUCCESS:
-			DBG_HEXDUMP(MDAT_D, "Tx",
-				    pmbuf->pbuf + pmbuf->data_offset,
-				    MIN(pmbuf->data_len + sizeof(TxPD),
-					MAX_DATA_DUMP_LEN));
+			DBG_HEXDUMP(
+				MDAT_D, "Tx", pmbuf->pbuf + pmbuf->data_offset,
+				MIN(pmbuf->data_len + Tx_PD_SIZEOF(pmadapter),
+				    MAX_DATA_DUMP_LEN));
 			wlan_write_data_complete(pmadapter, pmbuf, ret);
 			break;
 		default:
@@ -2878,6 +2880,69 @@ t_void wlan_restore_tdls_packets(pmlan_private priv, t_u8 *mac,
 }
 
 /**
+ *  @brief This function prepares the command of HOST ADDTS
+ *
+ *  @param pmpriv       A pointer to mlan_private structure
+ *  @param cmd          A pointer to HostCmd_DS_COMMAND structure
+ *  @param pdata_buf    A pointer to data buffer
+ *  @return             MLAN_STATUS_SUCCESS
+ */
+mlan_status wlan_cmd_wmm_host_addts_req(pmlan_private pmpriv,
+					HostCmd_DS_COMMAND *cmd,
+					t_void *pdata_buf)
+{
+	mlan_ds_tx_addts_cfg *paddts = (mlan_ds_tx_addts_cfg *)pdata_buf;
+	HostCmd_DS_WMM_HOST_ADDTS_REQ *pcmd_addts = &cmd->params.host_add_ts;
+
+	ENTER();
+
+	cmd->command = wlan_cpu_to_le16(HostCmd_CMD_WMM_HOST_ADDTS_REQ);
+	cmd->size = wlan_cpu_to_le16(sizeof(*pcmd_addts) + S_DS_GEN);
+	cmd->result = 0;
+
+	pcmd_addts->tsid = paddts->tsid;
+	;
+	pcmd_addts->user_prio = paddts->user_prio;
+	pcmd_addts->admitted_time = wlan_cpu_to_le16(paddts->admitted_time);
+	memcpy_ext(pmpriv->adapter, pcmd_addts->peer_addr, paddts->peer,
+		   sizeof(pcmd_addts->peer_addr), MLAN_MAC_ADDR_LENGTH);
+
+	LEAVE();
+
+	return MLAN_STATUS_SUCCESS;
+}
+
+/**
+ *  @brief This function prepares the command of HOST DELTS
+ *
+ *  @param pmpriv       A pointer to mlan_private structure
+ *  @param cmd          A pointer to HostCmd_DS_COMMAND structure
+ *  @param pdata_buf    A pointer to data buffer
+ *  @return             MLAN_STATUS_SUCCESS
+ */
+mlan_status wlan_cmd_wmm_host_delts_req(pmlan_private pmpriv,
+					HostCmd_DS_COMMAND *cmd,
+					t_void *pdata_buf)
+{
+	mlan_ds_tx_delts_cfg *pdelts = (mlan_ds_tx_delts_cfg *)pdata_buf;
+	HostCmd_DS_WMM_HOST_DELTS_REQ *pcmd_delts = &cmd->params.host_del_ts;
+
+	ENTER();
+
+	cmd->command = wlan_cpu_to_le16(HostCmd_CMD_WMM_HOST_DELTS_REQ);
+	cmd->size = wlan_cpu_to_le16(sizeof(*pcmd_delts) + S_DS_GEN);
+	cmd->result = 0;
+
+	pcmd_delts->tsid = pdelts->tsid;
+	memcpy_ext(pmpriv->adapter, pcmd_delts->peer_addr, pdelts->peer,
+		   sizeof(pcmd_delts->peer_addr), sizeof(MLAN_MAC_ADDR_LENGTH));
+
+	LEAVE();
+
+	return MLAN_STATUS_SUCCESS;
+}
+
+/**
  *  @brief This function prepares the command of ADDTS
  *
  *  @param pmpriv       A pointer to mlan_private structure
@@ -3310,6 +3375,67 @@ static mlan_status wlan_wmm_ioctl_delts_req(pmlan_adapter pmadapter,
 }
 
 /**
+ *  @brief Request for add a TSPEC
+ *
+ *  @param pmadapter    A pointer to mlan_adapter structure
+ *  @param pioctl_req   A pointer to ioctl request buffer
+ *
+ *  @return             MLAN_STATUS_PENDING --success, otherwise fail
+ */
+static mlan_status wlan_wmm_ioctl_host_addts_req(pmlan_adapter pmadapter,
+						 pmlan_ioctl_req pioctl_req)
+{
+	mlan_status ret = MLAN_STATUS_SUCCESS;
+	pmlan_private pmpriv = pmadapter->priv[pioctl_req->bss_index];
+	mlan_ds_wmm_cfg *cfg = MNULL;
+
+	ENTER();
+
+	cfg = (mlan_ds_wmm_cfg *)pioctl_req->pbuf;
+
+	/* Send request to firmware */
+	ret = wlan_prepare_cmd(pmpriv, HostCmd_CMD_WMM_HOST_ADDTS_REQ, 0, 0,
+			       (t_void *)pioctl_req,
+			       (t_void *)&cfg->param.host_addts);
+
+	if (ret == MLAN_STATUS_SUCCESS)
+		ret = MLAN_STATUS_PENDING;
+
+	LEAVE();
+	return ret;
+}
+
+/**
+ *  @brief Request for delete a TSPEC
+ *
+ *  @param pmadapter    A pointer to mlan_adapter structure
+ *  @param pioctl_req   A pointer to ioctl request buffer
+ *
+ *  @return             MLAN_STATUS_PENDING --success, otherwise fail
+ */
+static mlan_status wlan_wmm_ioctl_host_delts_req(pmlan_adapter pmadapter,
+						 pmlan_ioctl_req pioctl_req)
+{
+	mlan_status ret = MLAN_STATUS_SUCCESS;
+	pmlan_private pmpriv = pmadapter->priv[pioctl_req->bss_index];
+	mlan_ds_wmm_cfg *cfg = MNULL;
+
+	ENTER();
+	cfg = (mlan_ds_wmm_cfg *)pioctl_req->pbuf;
+
+	/* Send request to firmware */
+	ret = wlan_prepare_cmd(pmpriv, HostCmd_CMD_WMM_HOST_DELTS_REQ, 0, 0,
+			       (t_void *)pioctl_req,
+			       (t_void *)&cfg->param.host_delts);
+
+	if (ret == MLAN_STATUS_SUCCESS)
+		ret = MLAN_STATUS_PENDING;
+
+	LEAVE();
+	return ret;
+}
+
+/**
  *  @brief To get and start/stop queue stats on a WMM AC
  *
  *  @param pmadapter    A pointer to mlan_adapter structure
@@ -3618,6 +3744,12 @@ mlan_status wlan_wmm_cfg_ioctl(pmlan_adapter pmadapter,
 		break;
 	case MLAN_OID_WMM_CFG_DELTS:
 		status = wlan_wmm_ioctl_delts_req(pmadapter, pioctl_req);
+		break;
+	case MLAN_OID_WMM_CFG_HOST_ADDTS:
+		status = wlan_wmm_ioctl_host_addts_req(pmadapter, pioctl_req);
+		break;
+	case MLAN_OID_WMM_CFG_HOST_DELTS:
+		status = wlan_wmm_ioctl_host_delts_req(pmadapter, pioctl_req);
 		break;
 	case MLAN_OID_WMM_CFG_QUEUE_STATS:
 		status = wlan_wmm_ioctl_queue_stats(pmadapter, pioctl_req);

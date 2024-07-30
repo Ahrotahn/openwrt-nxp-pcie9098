@@ -436,6 +436,24 @@ typedef struct _moal_drv_timer {
 	t_u32 timer_is_canceled;
 } moal_drv_timer, *pmoal_drv_timer;
 
+/** moal_802_11_action header */
+typedef struct {
+	/** Frame Cotrol */
+	t_u16 frame_control;
+	/** Duration */
+	t_u16 duration;
+	/** dest addr */
+	t_u8 da[ETH_ALEN];
+	/** source addr */
+	t_u8 sa[ETH_ALEN];
+	/** bssid */
+	t_u8 bssid[ETH_ALEN];
+	/** seq_ctrl */
+	t_u16 seq_ctrl;
+	/** category */
+	t_u8 category;
+} __attribute__((packed)) moal_802_11_action_header;
+
 /**
  *  @brief Timer handler
  *
@@ -1373,7 +1391,7 @@ struct rf_test_mode_data {
 	/* Rx fcs error count */
 	t_u32 rx_pkt_fcs_err_count;
 	/* Tx power config values */
-	t_u32 tx_power_data[3];
+	t_s32 tx_power_data[3];
 	/* Tx continuous config values */
 	t_u32 tx_cont_data[6];
 	/* Tx frame config values */
@@ -1550,6 +1568,13 @@ enum scan_set_band {
 };
 #endif
 
+/** IPv6 address node */
+struct ipv6addr_entry {
+	/** list node link */
+	struct list_head link;
+	/** IPv6 address entry */
+	t_u8 ipv6_addr[16];
+};
 /** Private structure for MOAL */
 struct _moal_private {
 	/** Handle structure */
@@ -1637,7 +1662,12 @@ struct _moal_private {
 	/** IP addr */
 	t_u8 ip_addr[IPADDR_LEN];
 	t_u8 ipv6_addr_configured;
-	t_u8 ipv6_addr[16];
+	/** IPv6 addr count */
+	t_u8 ipv6count;
+	/** IPv6 addr Queue */
+	struct list_head ipv6_addrses;
+	/** Lock for IPv6 addrs */
+	spinlock_t ipv6addr_lock;
 #ifdef STA_SUPPORT
 	/** scan type */
 	t_u8 scan_type;
@@ -2598,6 +2628,8 @@ typedef struct _moal_mod_para {
 	int hs_auto_arp;
 	/** Dual-BT **/
 	int dual_nb;
+	/* reject addba req config for HS or FW Auto-reconnect */
+	t_u32 reject_addba_req;
 } moal_mod_para;
 
 void woal_tp_acnt_timer_func(void *context);
@@ -2915,6 +2947,15 @@ struct _moal_handle {
 #endif
 	/** cookie */
 	t_u64 cookie;
+#endif
+
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+	/** Tx frame wait cancel timer set flag */
+	BOOLEAN is_nan_timer_set;
+	/** Tx frame wait timer for nan publish */
+	moal_drv_timer nan_timer __ATTRIB_ALIGN__;
+	/** NAN cookie */
+	t_u64 nan_cookie;
 #endif
 
 #ifdef WIFI_DIRECT_SUPPORT
@@ -4116,6 +4157,9 @@ int woal_hostcmd_ioctl(struct net_device *dev, struct ifreq *req);
 mlan_status woal_set_remain_channel_ioctl(moal_private *priv, t_u8 wait_option,
 					  pmlan_ds_remain_chan pchan);
 void woal_remain_timer_func(void *context);
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+void woal_nan_timer_func(void *context);
+#endif
 #ifdef WIFI_DIRECT_SUPPORT
 mlan_status woal_wifi_direct_mode_cfg(moal_private *priv, t_u16 action,
 				      t_u16 *mode);

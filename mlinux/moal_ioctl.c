@@ -36,7 +36,7 @@ Change log:
 #ifdef UAP_SUPPORT
 #include "moal_uap.h"
 #endif
-
+#include <linux/list.h>
 #if defined(STA_CFG80211) || defined(UAP_CFG80211)
 #include "moal_cfg80211.h"
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
@@ -1210,9 +1210,12 @@ void woal_check_mc_connection(moal_private *priv, t_u8 wait_option,
 	int i;
 #endif
 	t_u16 enable = 0;
-
-	if (woal_mc_policy_cfg(priv, &enable, wait_option, MLAN_ACT_GET)) {
-		PRINTM(MERROR, "Get multi-channel policy failed\n");
+	if (priv->phandle->card_info->drcs &&
+	    moal_extflg_isset(priv->phandle, EXT_CFG80211_DRCS)) {
+		if (woal_mc_policy_cfg(priv, &enable, wait_option,
+				       MLAN_ACT_GET)) {
+			PRINTM(MERROR, "Get multi-channel policy failed\n");
+		}
 	}
 
 	if (!enable)
@@ -3090,8 +3093,10 @@ static mlan_status woal_set_ipv6_ra_offload(moal_handle *handle, t_u8 enable)
 	moal_private *priv = NULL;
 	mlan_ds_misc_cfg *misc = NULL;
 	mlan_ioctl_req *req = NULL;
-	mlan_ds_misc_ipv6_ra_offload *ipv6_ra;
+	t_u8 *ipv6_ra;
 	int i = 0;
+	unsigned long flags;
+	struct ipv6addr_entry *ipv6_entry = NULL;
 
 	ENTER();
 
@@ -3115,10 +3120,18 @@ static mlan_status woal_set_ipv6_ra_offload(moal_handle *handle, t_u8 enable)
 	misc->sub_command = MLAN_OID_MISC_IPV6_RA_OFFLOAD;
 	req->req_id = MLAN_IOCTL_MISC_CFG;
 	req->action = MLAN_ACT_SET;
-	ipv6_ra = &misc->param.ipv6_ra_offload;
-	ipv6_ra->enable = enable;
-	moal_memcpy_ext(priv->phandle, ipv6_ra->ipv6_addr, priv->ipv6_addr, 16,
-			sizeof(ipv6_ra->ipv6_addr));
+
+	misc->param.ipv6_ra_offload.enable = enable;
+	misc->param.ipv6_ra_offload.ipv6_addrs_count = priv->ipv6count;
+	spin_lock_irqsave(&priv->ipv6addr_lock, flags);
+	ipv6_ra = misc->param.ipv6_ra_offload.ipv6_addrs;
+	list_for_each_entry (ipv6_entry, &priv->ipv6_addrses, link) {
+		moal_memcpy_ext(priv->phandle, ipv6_ra, ipv6_entry->ipv6_addr,
+				IPADDR_LEN, IPADDR_LEN);
+		ipv6_ra += IPADDR_LEN;
+	}
+	spin_unlock_irqrestore(&priv->ipv6addr_lock, flags);
+
 	ret = woal_request_ioctl(woal_get_priv(handle, MLAN_BSS_ROLE_STA), req,
 				 MOAL_NO_WAIT);
 	if (ret != MLAN_STATUS_SUCCESS && ret != MLAN_STATUS_PENDING)
@@ -3691,7 +3704,7 @@ mlan_status woal_cancel_hs(moal_private *priv, t_u8 wait_option)
 	hscfg.conditions = HOST_SLEEP_CFG_CANCEL;
 	hscfg.is_invoke_hostcmd = MTRUE;
 	ret = woal_set_get_hs_params(priv, MLAN_ACT_SET, wait_option, &hscfg);
-	if (ret != MLAN_STATUS_SUCCESS) {
+	if (ret != MLAN_STATUS_SUCCESS && ret != MLAN_STATUS_PENDING) {
 		PRINTM(MERROR, "%s: woal_set_get_hs_params failed \n",
 		       __func__);
 		LEAVE();
@@ -8306,7 +8319,7 @@ static int parse_tx_pwr_string(moal_handle *handle, const char *s, size_t len,
 	if (pos)
 		d->data3 = (t_u32)woal_string_to_number(pos);
 
-	if (((d->data1 > pow_limit) && (d->data1 != 0xffffffff)) ||
+	if (((d->data1 > pow_limit) && (d->data1 <= 0xfffffff0)) ||
 	    (d->data2 > 2))
 		ret = -EINVAL;
 

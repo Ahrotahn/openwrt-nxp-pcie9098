@@ -2080,7 +2080,7 @@ done:
 static int woal_setget_priv_txratecfg(moal_private *priv, t_u8 *respbuf,
 				      t_u32 respbuflen)
 {
-	t_u32 data[4];
+	t_u32 data[5];
 	mlan_ioctl_req *req = NULL;
 	mlan_ds_rate *rate = NULL;
 	woal_tx_rate_cfg *ratecfg = NULL;
@@ -2102,8 +2102,14 @@ static int woal_setget_priv_txratecfg(moal_private *priv, t_u8 *respbuf,
 				data, ARRAY_SIZE(data), &user_data_len);
 	}
 
-	if (user_data_len > 4) {
+	if (user_data_len > 5) {
 		PRINTM(MERROR, "Too many arguments\n");
+		ret = -EINVAL;
+		goto done;
+	}
+
+	if ((user_data_len == 5) && (data[4] > 1)) {
+		PRINTM(MERROR, "Invalid auto_null_fixrate parameter");
 		ret = -EINVAL;
 		goto done;
 	}
@@ -2118,6 +2124,8 @@ static int woal_setget_priv_txratecfg(moal_private *priv, t_u8 *respbuf,
 	rate = (mlan_ds_rate *)req->pbuf;
 	rate->sub_command = MLAN_OID_RATE_CFG;
 	rate->param.rate_cfg.rate_type = MLAN_RATE_INDEX;
+
+	rate->auto_null_fixrate_enable = 0xFF;
 
 	if (user_data_len == 0) {
 		/* Get operation */
@@ -2180,7 +2188,7 @@ static int woal_setget_priv_txratecfg(moal_private *priv, t_u8 *respbuf,
 				}
 				rate->param.rate_cfg.nss = data[2];
 			}
-			if (user_data_len == 4) {
+			if ((user_data_len == 4) || (data[4] == 1)) {
 				rate->param.rate_cfg.rate_setting =
 					data[3] & ~0x0C00;
 				PRINTM(MIOCTL,
@@ -2245,6 +2253,13 @@ static int woal_setget_priv_txratecfg(moal_private *priv, t_u8 *respbuf,
 				}
 			} else {
 				rate->param.rate_cfg.rate_setting = 0xffff;
+			}
+
+			if (user_data_len == 5) {
+				rate->auto_null_fixrate_enable = data[4];
+				PRINTM(MINFO,
+				       "SET: auto_null_fixrate_enable: 0x%x\n",
+				       data[4]);
 			}
 		}
 	}

@@ -4,7 +4,7 @@
  *  definitions used in MLAN and MOAL module.
  *
  *
- *  Copyright 2008-2023 NXP
+ *  Copyright 2008-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -883,6 +883,27 @@ typedef MLAN_PACK_START enum _IEEEtypes_WMM_Tspec_Action_e {
 	TSPEC_ACTION_CODE_DELTS = 2,
 
 } MLAN_PACK_END IEEEtypes_WMM_Tspec_Action_e;
+
+/** NAN SDF vendor oui size */
+#define NAN_SDF_VENDOR_SIZE 4
+/** NAN service descriptor attribute offset */
+#define NAN_SDA_OFFSET 5
+/** NAN service control type offset */
+#define NAN_SRVC_CTRL_OFFSET 11
+/** Service control field */
+#define NAN_SRV_CTRL_TYPE_MASK (BIT(0) | BIT(1))
+/** NAN publish frame */
+#define NAN_PUBLISH 0
+
+/** NAN Attribute ID list */
+typedef MLAN_PACK_START enum _Nan_AttrId_e {
+	NAN_ATTR_SDA = 0x03
+} MLAN_PACK_END Nan_AttrId_e;
+
+/** Public Action Codes */
+typedef MLAN_PACK_START enum _IEEEtypes_Public_ActionCategory_e {
+	IEEE_PUBLIC_ACTION_CATEGORY_VENDOR_SPECIFIC = 9
+} MLAN_PACK_END IEEEtypes_Public_ActionCategory_e;
 
 /** WMM TSPEC Category Action Base */
 typedef MLAN_PACK_START struct {

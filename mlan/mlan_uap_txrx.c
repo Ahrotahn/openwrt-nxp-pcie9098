@@ -3,7 +3,7 @@
  *  @brief This file contains AP mode transmit and receive functions
  *
  *
- *  Copyright 2009-2021 NXP
+ *  Copyright 2009-2021, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -189,12 +189,13 @@ t_void *wlan_ops_uap_process_txpd(t_void *priv, pmlan_buffer pmbuf)
 		pmbuf->data_offset += sizeof(pkt_type) + sizeof(tx_control);
 		pmbuf->data_len -= sizeof(pkt_type) + sizeof(tx_control);
 	}
-	if (pmbuf->data_offset <
-	    (sizeof(TxPD) + pmpriv->intf_hr_len + DMA_ALIGNMENT)) {
+	if (pmbuf->data_offset < (Tx_PD_SIZEOF(pmpriv->adapter) +
+				  pmpriv->intf_hr_len + DMA_ALIGNMENT)) {
 		PRINTM(MERROR,
 		       "not enough space for TxPD: headroom=%d pkt_len=%d, required=%d\n",
 		       pmbuf->data_offset, pmbuf->data_len,
-		       sizeof(TxPD) + pmpriv->intf_hr_len + DMA_ALIGNMENT);
+		       Tx_PD_SIZEOF(pmpriv->adapter) + pmpriv->intf_hr_len +
+			       DMA_ALIGNMENT);
 		DBG_HEXDUMP(MDAT_D, "drop pkt",
 			    pmbuf->pbuf + pmbuf->data_offset, pmbuf->data_len);
 		pmbuf->status_code = MLAN_ERROR_PKT_SIZE_INVALID;
@@ -202,12 +203,13 @@ t_void *wlan_ops_uap_process_txpd(t_void *priv, pmlan_buffer pmbuf)
 	}
 
 	/* head_ptr should be aligned */
-	head_ptr = pmbuf->pbuf + pmbuf->data_offset - sizeof(TxPD) -
-		   pmpriv->intf_hr_len;
+	head_ptr = pmbuf->pbuf + pmbuf->data_offset -
+		   Tx_PD_SIZEOF(pmpriv->adapter) - pmpriv->intf_hr_len;
 	head_ptr = (t_u8 *)((t_ptr)head_ptr & ~((t_ptr)(DMA_ALIGNMENT - 1)));
 
 	plocal_tx_pd = (TxPD *)(head_ptr + pmpriv->intf_hr_len);
-	memset(pmpriv->adapter, plocal_tx_pd, 0, sizeof(TxPD));
+	// coverity[bad_memset:SUPPRESS]
+	memset(pmpriv->adapter, plocal_tx_pd, 0, Tx_PD_SIZEOF(pmpriv->adapter));
 
 	/* Set the BSS number to TxPD */
 	plocal_tx_pd->bss_num = GET_BSS_NUM(pmpriv);
@@ -668,8 +670,8 @@ mlan_status wlan_uap_recv_packet(mlan_private *priv, pmlan_buffer pmbuf)
 				newbuf->in_ts_sec = pmbuf->in_ts_sec;
 				newbuf->in_ts_usec = pmbuf->in_ts_usec;
 				newbuf->data_offset =
-					(sizeof(TxPD) + priv->intf_hr_len +
-					 DMA_ALIGNMENT);
+					(Tx_PD_SIZEOF(pmadapter) +
+					 priv->intf_hr_len + DMA_ALIGNMENT);
 				util_scalar_increment(
 					pmadapter->pmoal_handle,
 					&pmadapter->pending_bridge_pkts,
@@ -716,8 +718,8 @@ mlan_status wlan_uap_recv_packet(mlan_private *priv, pmlan_buffer pmbuf)
 				newbuf->in_ts_sec = pmbuf->in_ts_sec;
 				newbuf->in_ts_usec = pmbuf->in_ts_usec;
 				newbuf->data_offset =
-					(sizeof(TxPD) + priv->intf_hr_len +
-					 DMA_ALIGNMENT);
+					(Tx_PD_SIZEOF(pmadapter) +
+					 priv->intf_hr_len + DMA_ALIGNMENT);
 				util_scalar_increment(
 					pmadapter->pmoal_handle,
 					&pmadapter->pending_bridge_pkts,
@@ -826,8 +828,8 @@ mlan_status wlan_process_uap_rx_packet(mlan_private *priv, pmlan_buffer pmbuf)
 				newbuf->in_ts_sec = pmbuf->in_ts_sec;
 				newbuf->in_ts_usec = pmbuf->in_ts_usec;
 				newbuf->data_offset =
-					(sizeof(TxPD) + priv->intf_hr_len +
-					 DMA_ALIGNMENT);
+					(Tx_PD_SIZEOF(pmadapter) +
+					 priv->intf_hr_len + DMA_ALIGNMENT);
 				util_scalar_increment(
 					pmadapter->pmoal_handle,
 					&pmadapter->pending_bridge_pkts,
@@ -884,7 +886,8 @@ mlan_status wlan_process_uap_rx_packet(mlan_private *priv, pmlan_buffer pmbuf)
 						newbuf->in_ts_usec =
 							pmbuf->in_ts_usec;
 						newbuf->data_offset =
-							(sizeof(TxPD) +
+							(Tx_PD_SIZEOF(
+								 pmadapter) +
 							 priv->intf_hr_len +
 							 DMA_ALIGNMENT);
 						util_scalar_increment(

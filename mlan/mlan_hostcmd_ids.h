@@ -3,7 +3,7 @@
  *  @brief This file contains host command ID definitions.
  *
  *
- *  Copyright 2023 NXP
+ *  Copyright 2023-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -456,6 +456,11 @@ ENUM_ELEMENT(HostCmd_CMD_GET_HW_SPEC, 0x0003),
 	ENUM_ELEMENT(HostCmd_CMD_802_11_TX_FRAME, 0x0283),
 	/** Host Command ID: PCIE ADMA INIT */
 	ENUM_ELEMENT(HostCmd_CMD_PCIE_ADMA_INIT, 0x0284),
+
+	/** Host Command ID : WMM HOST ADDTS req */
+	ENUM_ELEMENT(HostCmd_CMD_WMM_HOST_ADDTS_REQ, 0x0287),
+	/** Host Command ID : WMM HOST DELTS req */
+	ENUM_ELEMENT(HostCmd_CMD_WMM_HOST_DELTS_REQ, 0x0288),
 
 	/* Always keep this last */
 	ENUM_ELEMENT_LAST(__HostCmd_CMD_Last)

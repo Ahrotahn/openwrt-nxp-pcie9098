@@ -5690,6 +5690,8 @@ mlan_status wlan_ops_uap_process_event(t_void *priv)
 		wlan_delete_station_list(pmpriv);
 		pmpriv->port_open = MFALSE;
 		pmpriv->amsdu_disable = MFALSE;
+		pmpriv->rxpd_rate_info = 0;
+		pmpriv->rxpd_rate = 0;
 		pmpriv->tx_pause = MFALSE;
 		break;
 	case EVENT_MICRO_AP_MIC_COUNTERMEASURES:

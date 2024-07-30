@@ -6,7 +6,7 @@
  *  for sending scan commands to the firmware.
  *
  *
- *  Copyright 2008-2023 NXP
+ *  Copyright 2008-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -6444,8 +6444,7 @@ mlan_status wlan_cmd_bgscan_config(mlan_private *pmpriv,
 		pscan_gap_tlv->header.type =
 			wlan_cpu_to_le16(TLV_TYPE_SCAN_CHANNEL_GAP);
 		pscan_gap_tlv->header.len = sizeof(pscan_gap_tlv->gap);
-		pscan_gap_tlv->gap =
-			wlan_cpu_to_le16((t_u16)pmadapter->scan_chan_gap);
+		pscan_gap_tlv->gap = wlan_cpu_to_le16((t_u16)scan_chan_gap);
 		/** indicate FW, gap is optional */
 		pscan_gap_tlv->gap |= GAP_FLAG_OPTIONAL;
 		tlv += sizeof(pscan_gap_tlv->header) +

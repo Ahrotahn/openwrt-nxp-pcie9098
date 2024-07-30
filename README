@@ -11,7 +11,7 @@
 	Goto source code directory.
 	make [clean] build
 	The driver and utility binaries can be found in bin_wlan directory.
-	The driver code supports Linux kernel from 2.6.32 to 6.7.0.
+	The driver code supports Linux kernel from 2.6.32 to 6.8.4.
 
 2) FOR DRIVER INSTALL
 

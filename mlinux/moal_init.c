@@ -4,7 +4,7 @@
  * driver.
  *
  *
- * Copyright 2018-2022 NXP
+ * Copyright 2018-2022, 2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -421,6 +421,8 @@ static int dfs53cfg = DFS_W53_DEFAULT_FW;
 
 static int keep_previous_scan = 1;
 static int auto_11ax = 1;
+static int reject_addba_req = 0;
+
 /**
  *  @brief This function read a line in module parameter file
  *
@@ -1539,6 +1541,14 @@ static mlan_status parse_cfg_read_block(t_u8 *data, t_u32 size,
 				goto err;
 			params->dual_nb = out_data;
 			PRINTM(MMSG, "dual_nb=%d\n", params->dual_nb);
+		} else if (strncmp(line, "reject_addba_req",
+				   strlen("reject_addba_req")) == 0) {
+			if (parse_line_read_int(line, &out_data) !=
+			    MLAN_STATUS_SUCCESS)
+				goto err;
+			params->reject_addba_req = out_data;
+			PRINTM(MMSG, "reject_addba_req=%x\n",
+			       params->reject_addba_req);
 		}
 	}
 	if (end)
@@ -1903,6 +1913,7 @@ static void woal_setup_module_param(moal_handle *handle, moal_mod_para *params)
 	}
 	handle->params.keep_previous_scan = keep_previous_scan;
 	handle->params.auto_11ax = auto_11ax;
+	handle->params.reject_addba_req = reject_addba_req;
 	handle->params.dual_nb = dual_nb;
 	if (params)
 		handle->params.dual_nb = params->dual_nb;
@@ -2447,6 +2458,13 @@ void woal_init_from_dev_tree(void)
 			if (!of_property_read_u32(dt_node, prop->name, &data)) {
 				PRINTM(MERROR, "auto_11ax=0x%x\n", data);
 				auto_11ax = data;
+			}
+		} else if (!strncmp(prop->name, "reject_addba_req",
+				    strlen("reject_addba_req"))) {
+			if (!of_property_read_u32(dt_node, prop->name, &data)) {
+				PRINTM(MERROR, "rej_addba_req_cfg=0x%x\n",
+				       data);
+				reject_addba_req = data;
 			}
 		}
 #if defined(STA_CFG80211) || defined(UAP_CFG80211)
@@ -3019,3 +3037,8 @@ MODULE_PARM_DESC(
 
 module_param(dual_nb, int, 0);
 MODULE_PARM_DESC(dual_nb, "0: Single BT (Default); 1: Dual BT");
+
+module_param(reject_addba_req, int, 0);
+MODULE_PARM_DESC(
+	reject_addba_req,
+	"Bit1: Reject the addba request when FW auto re-connect enabled (STA BSS only); Bit0: Reject the addba request when HS activated");

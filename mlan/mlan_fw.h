@@ -5,7 +5,7 @@
  *  in MLAN module.
  *
  *
- *  Copyright 2008-2023 NXP
+ *  Copyright 2008-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -257,8 +257,8 @@ typedef enum _KEY_INFO_WAPI {
 #define EXTRA_LEN 256
 
 /** Buffer size for ethernet Tx packets */
-#define MRVDRV_ETH_TX_PACKET_BUFFER_SIZE                                       \
-	(MV_ETH_FRAME_LEN + sizeof(TxPD) + EXTRA_LEN)
+#define MRVDRV_ETH_TX_PACKET_BUFFER_SIZE(_adapter)                             \
+	(MV_ETH_FRAME_LEN + Tx_PD_SIZEOF(_adapter) + EXTRA_LEN)
 
 /** Buffer size for ethernet Rx packets */
 #define MRVDRV_ETH_RX_PACKET_BUFFER_SIZE                                       \
@@ -1215,6 +1215,8 @@ enum host_cmd_id {
 #define FW_CAPINFO_EXT_SEC_RG_POWER MBIT(19)
 /** FW cap info bit 20: RX_SW_INT */
 #define FW_CAPINFO_EXT_RX_SW_INT MBIT(20)
+/** FW cap info bit 21: EASY_MESH_SUPPORT */
+#define FW_CAPINFO_EASY_MESH MBIT(21)
 
 /** Check if 5G 1x1 only is supported by firmware */
 #define IS_FW_SUPPORT_5G_1X1_ONLY(_adapter)                                    \
@@ -1261,6 +1263,12 @@ enum host_cmd_id {
 	(_adapter->fw_cap_ext & FW_CAPINFO_EXT_SEC_RG_POWER)
 #define IS_FW_SUPPORT_RX_SW_INT(_adapter)                                      \
 	(_adapter->fw_cap_ext & FW_CAPINFO_EXT_RX_SW_INT)
+/** Check if easy mesh supported by firmware */
+#define IS_FW_SUPPORT_EASY_MESH(_adapter)                                      \
+	(_adapter->fw_cap_ext & FW_CAPINFO_EASY_MESH)
+
+#define Tx_PD_SIZEOF(_adapter)                                                 \
+	(IS_FW_SUPPORT_EASY_MESH(_adapter) ? sizeof(TxPD) : (sizeof(TxPD) - 8))
 
 /** MrvlIEtypes_PrevBssid_t */
 typedef MLAN_PACK_START struct _MrvlIEtypes_PrevBssid_t {
@@ -1441,6 +1449,11 @@ typedef enum _ENH_PS_MODES {
 
 /** Command RET code, MSB is set to 1 */
 #define HostCmd_RET_BIT 0x8000
+
+/** Special purpose action : Set */
+#define HostCmd_ACT_SPC_AUTO_SET 0x8002
+/** Special purpose action : Set */
+#define HostCmd_ACT_SPC_AUTO_NOSET 0x8003
 
 /** General purpose action : Get */
 #define HostCmd_ACT_GEN_GET 0x0000
@@ -4880,6 +4893,32 @@ typedef MLAN_PACK_START struct {
 } MLAN_PACK_END HostCmd_DS_WMM_GET_STATUS;
 
 /**
+ *  @brief Command structure for the HostCmd_CMD_WMM_HOST_ADDTS_REQ firmware
+ * command
+ */
+typedef MLAN_PACK_START struct {
+	/* TS id - unique per tid, TA, RA combination */
+	t_u8 tsid;
+	/* RA BSSID */
+	t_u8 peer_addr[MLAN_MAC_ADDR_LENGTH];
+	/* User priority (UP) */
+	t_u8 user_prio;
+	/* Admitted Air time for UP */
+	t_u16 admitted_time;
+} MLAN_PACK_END HostCmd_DS_WMM_HOST_ADDTS_REQ;
+
+/**
+ *  @brief Command structure for the HostCmd_CMD_WMM_HOST_DELTS_REQ firmware
+ * command
+ */
+typedef MLAN_PACK_START struct {
+	/* TS id - unique per tid, TA, RA combination */
+	t_u8 tsid;
+	/* RA BSSID */
+	t_u8 peer_addr[MLAN_MAC_ADDR_LENGTH];
+} MLAN_PACK_END HostCmd_DS_WMM_HOST_DELTS_REQ;
+
+/**
  *  @brief Command structure for the HostCmd_CMD_WMM_ADDTS_REQ firmware command
  */
 typedef MLAN_PACK_START struct {
@@ -7186,7 +7225,8 @@ typedef MLAN_PACK_START struct _HostCmd_DS_SENSOR_TEMP {
 #define TLV_TYPE_IPV6_RA_OFFLOAD (PROPRIETARY_TLV_BASE_ID + 0xE6) /** 0x1E6*/
 typedef MLAN_PACK_START struct {
 	MrvlIEtypesHeader_t Header;
-	t_u8 ipv6_addr[16];
+	/** ipv6 address buffer */
+	t_u8 ipv6_addrs[];
 } MLAN_PACK_END MrvlIETypes_IPv6AddrParamSet_t;
 
 typedef MLAN_PACK_START struct _HostCmd_DS_IPV6_RA_OFFLOAD {
@@ -7196,6 +7236,8 @@ typedef MLAN_PACK_START struct _HostCmd_DS_IPV6_RA_OFFLOAD {
 	t_u16 action;
 	/** 0x00: disable IPv6 RA Offload; 0x01: enable IPv6 RA offload */
 	t_u8 enable;
+	/** Number of IPv6 address configured in FW */
+	t_u8 ipv6_addr_count;
 	MrvlIETypes_IPv6AddrParamSet_t ipv6_addr_param;
 } MLAN_PACK_END HostCmd_DS_IPV6_RA_OFFLOAD;
 
@@ -7994,6 +8036,11 @@ typedef struct MLAN_PACK_START _HostCmd_DS_COMMAND {
 
 		HostCmd_DS_EDMAC_CFG ed_mac_cfg;
 		HostCmd_gpio_cfg_ops gpio_cfg_ops;
+
+		/** WMM HOST ADDTS */
+		HostCmd_DS_WMM_HOST_ADDTS_REQ host_add_ts;
+		/** WMM HOST DELTS */
+		HostCmd_DS_WMM_HOST_DELTS_REQ host_del_ts;
 	} params;
 } MLAN_PACK_END HostCmd_DS_COMMAND, *pHostCmd_DS_COMMAND;
 

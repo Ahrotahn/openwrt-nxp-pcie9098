@@ -5122,6 +5122,15 @@ mlan_status wlan_adapter_init_cmd(pmlan_adapter pmadapter)
 				       &dmcs_policy);
 	}
 
+	if (pmadapter->init_para.reject_addba_req) {
+		mlan_ds_reject_addba_req rej_addba_req_cfg;
+		rej_addba_req_cfg.conditions =
+			pmadapter->init_para.reject_addba_req;
+		ret = wlan_prepare_cmd(pmpriv, HostCmd_CMD_REJECT_ADDBA_REQ,
+				       HostCmd_ACT_GEN_SET, 0, (t_void *)MNULL,
+				       &rej_addba_req_cfg);
+	}
+
 #define DEF_AUTO_NULL_PKT_PERIOD 30
 	if (pmpriv_sta) {
 		t_u32 value = DEF_AUTO_NULL_PKT_PERIOD;
@@ -10577,15 +10586,17 @@ mlan_status wlan_cmd_tx_frame(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		data_len -= sizeof(pkt_type) + sizeof(tx_control);
 		pdata += sizeof(pkt_type) + sizeof(tx_control);
 	}
-	memcpy_ext(pmpriv->adapter, tx_frame_cmd->buffer + sizeof(TxPD), pdata,
+	memcpy_ext(pmpriv->adapter,
+		   tx_frame_cmd->buffer + Tx_PD_SIZEOF(pmpriv->adapter), pdata,
 		   data_len, data_len);
 
-	memset(pmpriv->adapter, plocal_tx_pd, 0, sizeof(TxPD));
+	// coverity[bad_memset:SUPPRESS]
+	memset(pmpriv->adapter, plocal_tx_pd, 0, Tx_PD_SIZEOF(pmpriv->adapter));
 	plocal_tx_pd->bss_num = GET_BSS_NUM(pmpriv);
 	plocal_tx_pd->bss_type = pmpriv->bss_type;
 	plocal_tx_pd->tx_pkt_length = (t_u16)data_len;
 	plocal_tx_pd->priority = (t_u8)tx_frame->priority;
-	plocal_tx_pd->tx_pkt_offset = sizeof(TxPD);
+	plocal_tx_pd->tx_pkt_offset = Tx_PD_SIZEOF(pmpriv->adapter);
 	plocal_tx_pd->pkt_delay_2ms = 0xff;
 
 	if (tx_frame->buf_type == MLAN_BUF_TYPE_RAW_DATA) {
@@ -10599,7 +10610,7 @@ mlan_status wlan_cmd_tx_frame(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 	}
 
 	endian_convert_TxPD(plocal_tx_pd);
-	cmd_size += sizeof(TxPD) + data_len;
+	cmd_size += Tx_PD_SIZEOF(pmpriv->adapter) + data_len;
 	cmd->size = wlan_cpu_to_le16(cmd_size);
 
 	LEAVE();

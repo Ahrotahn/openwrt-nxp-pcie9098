@@ -2889,6 +2889,34 @@ done:
 	return ret;
 }
 
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+/*
+ * @brief  validate if packet is NAN publish
+ *
+ * @param buf	Frame buffer
+ *
+ * @return	true -- success, otherwise false
+ */
+static BOOLEAN is_nan_publish(const t_u8 *buf)
+{
+	t_u8 nan_sdf_oui[4] = {0x50, 0x6f, 0x9a, 0x13};
+	t_u8 nan_attr_id, nan_srv_ctrl_type;
+
+	if (!memcmp(nan_sdf_oui, buf + 1, NAN_SDF_VENDOR_SIZE)) {
+		nan_attr_id = *(buf + NAN_SDA_OFFSET);
+		nan_srv_ctrl_type =
+			*(buf + NAN_SDA_OFFSET + NAN_SRVC_CTRL_OFFSET);
+		if (nan_attr_id == NAN_ATTR_SDA &&
+		    (nan_srv_ctrl_type & NAN_SRV_CTRL_TYPE_MASK) ==
+			    NAN_PUBLISH) {
+			return MTRUE;
+		}
+	}
+
+	return MFALSE;
+}
+#endif
+
 #if KERNEL_VERSION(3, 2, 0) <= CFG80211_VERSION_CODE
 #if KERNEL_VERSION(3, 3, 0) <= CFG80211_VERSION_CODE
 #if KERNEL_VERSION(3, 6, 0) <= CFG80211_VERSION_CODE
@@ -3041,6 +3069,9 @@ int woal_cfg80211_mgmt_tx(struct wiphy *wiphy,
 	moal_private *remain_priv = NULL;
 #endif
 	t_u16 fc, type, stype;
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+	t_u8 category, action;
+#endif
 	ENTER();
 
 	if (buf == NULL || len == 0) {
@@ -3226,6 +3257,26 @@ int woal_cfg80211_mgmt_tx(struct wiphy *wiphy,
 	*cookie = get_random_u32() | 1;
 #endif
 #endif
+
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+	if (ieee80211_is_action(
+		    ((struct ieee80211_mgmt *)buf)->frame_control)) {
+		category = *(buf + sizeof(moal_802_11_action_header) - 1);
+		action = *(buf + sizeof(moal_802_11_action_header));
+		if (category == IEEE_MGMT_ACTION_CATEGORY_PUBLIC &&
+		    action == IEEE_PUBLIC_ACTION_CATEGORY_VENDOR_SPECIFIC &&
+		    is_nan_publish(buf + sizeof(moal_802_11_action_header))) {
+			priv->phandle->nan_cookie = *cookie;
+			if (priv->phandle->is_nan_timer_set) {
+				woal_cancel_timer(&priv->phandle->nan_timer);
+				priv->phandle->is_nan_timer_set = MFALSE;
+			}
+			priv->phandle->is_nan_timer_set = MTRUE;
+			woal_mod_timer(&priv->phandle->nan_timer, wait);
+		}
+	}
+#endif
+
 	ret = woal_mgmt_tx(priv, buf, len, chan, *cookie, wait);
 
 done:

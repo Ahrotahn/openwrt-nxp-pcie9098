@@ -3,7 +3,7 @@
  *  @brief This file declares the IOCTL data structures and APIs.
  *
  *
- *  Copyright 2008-2023 NXP
+ *  Copyright 2008-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -183,6 +183,8 @@ enum _mlan_ioctl_req_id {
 	MLAN_OID_WMM_CFG_QUEUE_STATS = 0x000A0006,
 	MLAN_OID_WMM_CFG_QUEUE_STATUS = 0x000A0007,
 	MLAN_OID_WMM_CFG_TS_STATUS = 0x000A0008,
+	MLAN_OID_WMM_CFG_HOST_ADDTS = 0x000A000A,
+	MLAN_OID_WMM_CFG_HOST_DELTS = 0x000A000B,
 
 	/* WPS Configuration Group */
 	MLAN_IOCTL_WPS_CFG = 0x000B0000,
@@ -2986,6 +2988,8 @@ typedef struct _mlan_data_rate {
 typedef struct _mlan_ds_rate {
 	/** Sub-command */
 	t_u32 sub_command;
+	/** Only set auto tx fix rate */
+	t_u16 auto_null_fixrate_enable;
 	/** Rate configuration parameter */
 	union {
 		/** Rate configuration for MLAN_OID_RATE_CFG */
@@ -3609,6 +3613,26 @@ typedef struct _mlan_ds_wmm_queue_config {
 	t_u8 reserved[10];
 } mlan_ds_wmm_queue_config, *pmlan_ds_wmm_queue_config;
 
+/** WMM HOST ADDTS configuration parameters */
+typedef struct _mlan_ds_tx_addts {
+	/* TS id - unique per tid, TA, RA combination */
+	t_u8 tsid;
+	/* RA BSSID */
+	t_u8 peer[MLAN_MAC_ADDR_LENGTH];
+	/* User priority (UP) */
+	t_u8 user_prio;
+	/* Admitted Air time for UP */
+	t_u16 admitted_time;
+} mlan_ds_tx_addts_cfg;
+
+/** WMM HOST DELTS configuration parameters */
+typedef struct _mlan_ds_tx_delts {
+	/* TS id - unique per tid, TA, RA combination */
+	t_u8 tsid;
+	/* RA BSSID */
+	t_u8 peer[MLAN_MAC_ADDR_LENGTH];
+} mlan_ds_tx_delts_cfg;
+
 /** Type definition of mlan_ds_wmm_cfg for MLAN_IOCTL_WMM_CFG */
 typedef struct _mlan_ds_wmm_cfg {
 	/** Sub-command */
@@ -3623,6 +3647,10 @@ typedef struct _mlan_ds_wmm_cfg {
 		mlan_ds_wmm_addts addts;
 		/** WMM delete TS for MLAN_OID_WMM_CFG_DELTS */
 		mlan_ds_wmm_delts delts;
+		/** WMM add TS for host config */
+		mlan_ds_tx_addts_cfg host_addts;
+		/** WMM del TS for host config */
+		mlan_ds_tx_delts_cfg host_delts;
 		/** WMM queue configuration for MLAN_OID_WMM_CFG_QUEUE_CONFIG */
 		mlan_ds_wmm_queue_config q_cfg;
 		/** AC Parameters Record WMM_AC_BE, WMM_AC_BK, WMM_AC_VI,
@@ -4138,7 +4166,7 @@ typedef struct _mlan_ds_11ax_rutxpwr_cmd {
 	 * and 6 for other SOCs */
 	t_u8 col;
 	/**ru tx data */
-	t_u8 rutxSubPwr[89];
+	t_s8 rutxSubPwr[89];
 } mlan_ds_11ax_rutxpwr_cmd, *pmlan_ds_11ax_rutxpwr_cmd;
 
 /** Type definition of mlan_ds_11ax_cmd_cfg for MLAN_OID_11AX_CMD_CFG */
@@ -4787,7 +4815,10 @@ typedef struct _mlan_ds_misc_ipaddr_cfg {
 typedef struct _mlan_ds_misc_ipv6_ra_offload {
 	/** 0: disable; 1: enable*/
 	t_u8 enable;
-	t_u8 ipv6_addr[16];
+	/** Number of IPv6 address configured in FW */
+	t_u8 ipv6_addrs_count;
+	/** Ipv6 address array */
+	t_u8 ipv6_addrs[];
 } mlan_ds_misc_ipv6_ra_offload;
 
 /* MEF configuration disable */

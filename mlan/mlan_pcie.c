@@ -3,7 +3,7 @@
  *  @brief This file contains PCI-E specific code
  *
  *
- *  Copyright 2008-2021 NXP
+ *  Copyright 2008-2021, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -2849,7 +2849,7 @@ static mlan_status wlan_pcie_process_recv_data(mlan_adapter *pmadapter)
 	t_u32 rdptr, rd_index;
 	mlan_buffer *pmbuf = MNULL;
 	t_u32 txbd_val = 0;
-	t_u16 rx_len, rx_type;
+	t_u16 rx_len = 0, rx_type;
 	const t_u32 num_rx_buffs = pmadapter->pcard_pcie->txrx_bd_size;
 	t_u32 reg_rxbd_rdptr = pmadapter->pcard_pcie->reg->reg_rxbd_rdptr;
 #if defined(PCIE8997) || defined(PCIE8897)
@@ -2902,6 +2902,14 @@ static mlan_status wlan_pcie_process_recv_data(mlan_adapter *pmadapter)
 			goto done;
 		}
 		pmbuf = pmadapter->pcard_pcie->rx_buf_list[rd_index];
+		/* if in previous Interrupt, SKB allocation fails, then there
+		 * will be no valid pmbuf in RxRing at the current index. we can
+		 * attempt reattch a valid pmbuf at same index and continue Rx.
+		 */
+		if (!pmbuf) {
+			PRINTM(MDAT_D, "RECV DATA: invalid pmbuf");
+			goto reattach;
+		}
 		if (MLAN_STATUS_FAILURE ==
 		    pcb->moal_unmap_memory(pmadapter->pmoal_handle,
 					   pmbuf->pbuf + pmbuf->data_offset,
@@ -2972,6 +2980,13 @@ static mlan_status wlan_pcie_process_recv_data(mlan_adapter *pmadapter)
 
 				pmadapter->data_received = MTRUE;
 			}
+		} else {
+			/* Queue the mlan_buffer again */
+			PRINTM(MERROR, "PCIE: Drop invalid packet, length=%d",
+			       rx_len);
+		}
+	reattach:
+		if ((rx_len <= MLAN_RX_DATA_BUF_SIZE) || (!pmbuf)) {
 			/* Create new buffer and attach it to Rx Ring */
 			pmbuf = wlan_alloc_mlan_buffer(pmadapter,
 						       MLAN_RX_DATA_BUF_SIZE,
@@ -2983,10 +2998,6 @@ static mlan_status wlan_pcie_process_recv_data(mlan_adapter *pmadapter)
 				ret = MLAN_STATUS_FAILURE;
 				goto done;
 			}
-		} else {
-			/* Queue the mlan_buffer again */
-			PRINTM(MERROR, "PCIE: Drop invalid packet, length=%d",
-			       rx_len);
 		}
 
 		if (MLAN_STATUS_FAILURE ==
@@ -5191,6 +5202,9 @@ static mlan_status wlan_pcie_interrupt_ext(t_u16 msg_id,
 	ENTER();
 	ret = wlan_pcie_interrupt(msg_id, pmadapter);
 	if (ret == MLAN_STATUS_SUCCESS) {
+		/* if we get interrupt, it means device wakes up, no need to
+		 * wake up */
+		pmadapter->pm_wakeup_timeout = 0;
 		wlan_process_pcie_int_status(pmadapter);
 	}
 	LEAVE();

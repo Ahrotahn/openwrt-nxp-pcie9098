@@ -4,7 +4,7 @@
  *  related functions.
  *
  *
- * Copyright 2008-2022 NXP
+ * Copyright 2008-2022, 2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -459,6 +459,7 @@ static mlan_status woal_do_flr(moal_handle *handle, bool prepare, bool flr_flag)
 	if (IS_PCIE9098(handle->card_type))
 		handle->event_fw_dump = MTRUE;
 #endif
+	handle->fw_dump = MFALSE;
 
 	goto exit;
 

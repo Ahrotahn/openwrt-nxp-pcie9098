@@ -203,8 +203,8 @@ mlan_status wlan_process_tx(pmlan_private priv, pmlan_buffer pmbuf,
 	if (GET_BSS_ROLE(priv) == MLAN_BSS_ROLE_STA)
 		plocal_tx_pd = (TxPD *)(head_ptr + priv->intf_hr_len);
 #endif
-	dest_mac_first_octet = *(head_ptr + priv->intf_hr_len + sizeof(TxPD) +
-				 DEST_MAC_OFFSET);
+	dest_mac_first_octet = *(head_ptr + priv->intf_hr_len +
+				 Tx_PD_SIZEOF(pmadapter) + DEST_MAC_OFFSET);
 
 	if (dest_mac_first_octet & 0x01)
 		wlan_drv_mcast_cycle_delay_calulation(pmadapter, pmbuf);
@@ -223,7 +223,7 @@ done:
 	case MLAN_STATUS_PRESOURCE:
 		PRINTM(MINFO, "MLAN_STATUS_PRESOURCE is returned\n");
 		DBG_HEXDUMP(MDAT_D, "Tx", head_ptr + priv->intf_hr_len,
-			    MIN(pmbuf->data_len + sizeof(TxPD),
+			    MIN(pmbuf->data_len + Tx_PD_SIZEOF(pmadapter),
 				MAX_DATA_DUMP_LEN));
 		break;
 #endif
@@ -246,12 +246,12 @@ done:
 		break;
 	case MLAN_STATUS_PENDING:
 		DBG_HEXDUMP(MDAT_D, "Tx", head_ptr + priv->intf_hr_len,
-			    MIN(pmbuf->data_len + sizeof(TxPD),
+			    MIN(pmbuf->data_len + Tx_PD_SIZEOF(pmadapter),
 				MAX_DATA_DUMP_LEN));
 		break;
 	case MLAN_STATUS_SUCCESS:
 		DBG_HEXDUMP(MDAT_D, "Tx", head_ptr + priv->intf_hr_len,
-			    MIN(pmbuf->data_len + sizeof(TxPD),
+			    MIN(pmbuf->data_len + Tx_PD_SIZEOF(pmadapter),
 				MAX_DATA_DUMP_LEN));
 		wlan_write_data_complete(pmadapter, pmbuf, ret);
 		break;

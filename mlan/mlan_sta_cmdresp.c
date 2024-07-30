@@ -2521,9 +2521,11 @@ static mlan_status wlan_ret_ipv6_ra_offload(pmlan_private pmpriv,
 		ipv6_ra = (mlan_ds_misc_ipv6_ra_offload *)&misc->param
 				  .ipv6_ra_offload;
 		ipv6_ra->enable = ipv6_ra_resp->enable;
-		memcpy_ext(pmpriv->adapter, ipv6_ra->ipv6_addr,
-			   ipv6_ra_resp->ipv6_addr_param.ipv6_addr, 16,
-			   sizeof(ipv6_ra->ipv6_addr));
+		ipv6_ra->ipv6_addrs_count = ipv6_ra_resp->ipv6_addr_count;
+		memcpy_ext(pmpriv->adapter, ipv6_ra->ipv6_addrs,
+			   ipv6_ra_resp->ipv6_addr_param.ipv6_addrs,
+			   (ipv6_ra->ipv6_addrs_count * IPADDR_LEN),
+			   (ipv6_ra->ipv6_addrs_count * IPADDR_LEN));
 	}
 
 	LEAVE();
@@ -3403,6 +3405,9 @@ mlan_status wlan_ops_sta_process_cmdresp(t_void *priv, t_u16 cmdresp_no,
 		break;
 	case HostCmd_CMD_WMM_DELTS_REQ:
 		ret = wlan_ret_wmm_delts_req(pmpriv, resp, pioctl_buf);
+		break;
+	case HostCmd_CMD_WMM_HOST_ADDTS_REQ:
+	case HostCmd_CMD_WMM_HOST_DELTS_REQ:
 		break;
 	case HostCmd_CMD_WMM_QUEUE_CONFIG:
 		ret = wlan_ret_wmm_queue_config(pmpriv, resp, pioctl_buf);

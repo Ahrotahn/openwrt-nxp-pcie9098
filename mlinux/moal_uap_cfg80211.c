@@ -1969,6 +1969,10 @@ moal_private *woal_alloc_virt_interface(moal_handle *handle, t_u8 bss_index,
 	spin_lock_init(&priv->dhcp_discover_lock);
 #endif
 
+#ifdef STA_CFG80211
+	INIT_LIST_HEAD(&priv->ipv6_addrses);
+	spin_lock_init(&priv->ipv6addr_lock);
+#endif
 	spin_lock_init(&priv->connect_lock);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 24)
@@ -3993,21 +3997,25 @@ int woal_cfg80211_start_radar_detection(struct wiphy *wiphy,
 	snprintf(event_buf, sizeof(event_buf) - 1, "%s %d", CUS_EVT_CAC_START,
 		 chandef->chan->hw_value);
 	woal_broadcast_event(priv, event_buf, strlen(event_buf));
-	if (MLAN_STATUS_SUCCESS ==
-	    woal_mc_policy_cfg(priv, &enable, MOAL_IOCTL_WAIT, MLAN_ACT_GET)) {
-		if (enable) {
-			if (MLAN_STATUS_SUCCESS ==
-			    woal_get_active_intf_channel(priv, &channel)) {
-				if (channel.channel !=
-				    chandef->chan->hw_value) {
-					PRINTM(MERROR,
-					       "DFS channel is not allowed when another connection exists on different channel\n");
-					PRINTM(MERROR,
-					       "Another connection's channel=%d, dfs channel=%d\n",
-					       channel.channel,
-					       chandef->chan->hw_value);
-					ret = -EINVAL;
-					goto done;
+	if (priv->phandle->card_info->drcs) {
+		if (MLAN_STATUS_SUCCESS == woal_mc_policy_cfg(priv, &enable,
+							      MOAL_IOCTL_WAIT,
+							      MLAN_ACT_GET)) {
+			if (enable) {
+				if (MLAN_STATUS_SUCCESS ==
+				    woal_get_active_intf_channel(priv,
+								 &channel)) {
+					if (channel.channel !=
+					    chandef->chan->hw_value) {
+						PRINTM(MERROR,
+						       "DFS channel is not allowed when another connection exists on different channel\n");
+						PRINTM(MERROR,
+						       "Another connection's channel=%d, dfs channel=%d\n",
+						       channel.channel,
+						       chandef->chan->hw_value);
+						ret = -EINVAL;
+						goto done;
+					}
 				}
 			}
 		}

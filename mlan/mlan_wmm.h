@@ -4,7 +4,7 @@
  *  of wmm functionalities
  *
  *
- *  Copyright 2008-2021 NXP
+ *  Copyright 2008-2021, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -203,6 +203,14 @@ extern mlan_status wlan_cmd_wmm_queue_stats(pmlan_private pmpriv,
 extern mlan_status wlan_cmd_wmm_ts_status(pmlan_private pmpriv,
 					  HostCmd_DS_COMMAND *cmd,
 					  t_void *pdata_buf);
+/** WMM HOST ADDTS request command handler */
+extern mlan_status wlan_cmd_wmm_host_addts_req(pmlan_private pmpriv,
+					       HostCmd_DS_COMMAND *cmd,
+					       t_void *pdata_buf);
+/** WMM HOST DELTS request command handler */
+extern mlan_status wlan_cmd_wmm_host_delts_req(pmlan_private pmpriv,
+					       HostCmd_DS_COMMAND *cmd,
+					       t_void *pdata_buf);
 
 /*
  *  Functions used in the cmdresp handling routine

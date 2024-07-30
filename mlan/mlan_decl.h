@@ -3,7 +3,7 @@
  *  @brief This file declares the generic data structures and APIs.
  *
  *
- *  Copyright 2008-2022 NXP
+ *  Copyright 2008-2022, 2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -2762,6 +2762,8 @@ typedef struct _mlan_device {
 	t_u32 antcfg;
 	/** dmcs */
 	t_u8 dmcs;
+	t_u32 reject_addba_req;
+
 } mlan_device, *pmlan_device;
 
 /** MLAN API function prototype */

@@ -3222,6 +3222,67 @@ static void wlan_sort_cfp_otp_table(mlan_adapter *pmadapter)
 }
 
 /**
+ *  @brief	        Set max tx power value per channel in otp tables
+ *
+ *  @param pmapdater	a pointer to mlan_adapter structure
+ *  @param is6g	        6g table true or false
+ *
+ *  @return
+ *    None
+ */
+static void wlan_set_otp_cfp_max_tx_pwr(mlan_adapter *pmadapter, t_bool is6g)
+{
+	t_u8 i, j;
+	t_u8 rows, cols, max = 0;
+
+	if (!pmadapter->otp_region)
+		return;
+
+	if (!is6g && pmadapter->cfp_otp_bg && pmadapter->tx_power_table_bg) {
+		rows = pmadapter->tx_power_table_bg_rows;
+		cols = pmadapter->tx_power_table_bg_cols;
+		if (pmadapter->tx_power_table_bg_size < (rows * cols))
+			goto table_a;
+		for (i = 0; i < rows; i++) {
+			max = 0;
+			if ((pmadapter->cfp_otp_bg + i)->dynamic.flags &
+			    NXP_CHANNEL_DISABLED)
+				continue;
+			/* get the max value among all mod group for this
+			 * channel */
+			for (j = 1; j < cols; j++)
+				max = MAX(
+					max,
+					pmadapter->tx_power_table_bg[i * cols +
+								     j]);
+
+			(pmadapter->cfp_otp_bg + i)->max_tx_power = max;
+		}
+	}
+table_a:
+	if (!is6g && pmadapter->cfp_otp_a && pmadapter->tx_power_table_a) {
+		rows = pmadapter->tx_power_table_a_rows;
+		cols = pmadapter->tx_power_table_a_cols;
+		if (pmadapter->tx_power_table_a_size < (rows * cols))
+			return;
+		for (i = 0; i < rows; i++) {
+			max = 0;
+			if ((pmadapter->cfp_otp_a + i)->dynamic.flags &
+			    NXP_CHANNEL_DISABLED)
+				continue;
+			/* get the max value among all mod group for this
+			 * channel */
+			for (j = 1; j < cols; j++)
+				max = MAX(max,
+					  pmadapter->tx_power_table_a[i * cols +
+								      j]);
+
+			(pmadapter->cfp_otp_a + i)->max_tx_power = max;
+		}
+	}
+}
+
+/**
  *  @brief	Update CFP tables and power tables from FW
  *
  *  @param priv		Private driver information structure
@@ -3550,6 +3611,9 @@ void wlan_add_fw_cfp_tables(pmlan_private pmpriv, t_u8 *buf, t_u16 buf_left)
 	}
 	if (!pmadapter->cfp_otp_bg || !pmadapter->tx_power_table_bg)
 		goto out;
+
+	wlan_set_otp_cfp_max_tx_pwr(pmadapter, MFALSE);
+
 	/* Set remaining flags for BG */
 	rows = pmadapter->tx_power_table_bg_rows;
 	cols = pmadapter->tx_power_table_bg_cols;

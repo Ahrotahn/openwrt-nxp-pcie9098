@@ -2972,6 +2972,8 @@ static mlan_status wlan_cmd_ipv6_ra_offload(mlan_private *pmpriv,
 	mlan_ds_misc_ipv6_ra_offload *ipv6_ra_offload =
 		(mlan_ds_misc_ipv6_ra_offload *)pdata_buf;
 	MrvlIEtypesHeader_t *ie = &ipv6_ra_cfg->ipv6_addr_param.Header;
+	t_u8 *pipv6addrs = ipv6_ra_cfg->ipv6_addr_param.ipv6_addrs;
+	t_u8 *psrcipv6addr = ipv6_ra_offload->ipv6_addrs;
 
 	ENTER();
 
@@ -2980,13 +2982,16 @@ static mlan_status wlan_cmd_ipv6_ra_offload(mlan_private *pmpriv,
 	if (cmd_action == HostCmd_ACT_GEN_SET) {
 		ipv6_ra_cfg->enable = ipv6_ra_offload->enable;
 		ie->type = wlan_cpu_to_le16(TLV_TYPE_IPV6_RA_OFFLOAD);
-		ie->len = wlan_cpu_to_le16(16);
-		memcpy_ext(pmpriv->adapter,
-			   ipv6_ra_cfg->ipv6_addr_param.ipv6_addr,
-			   ipv6_ra_offload->ipv6_addr, 16,
-			   sizeof(ipv6_ra_cfg->ipv6_addr_param.ipv6_addr));
+		ipv6_ra_cfg->ipv6_addr_count =
+			ipv6_ra_offload->ipv6_addrs_count;
+		memcpy_ext(pmpriv->adapter, pipv6addrs, psrcipv6addr,
+			   (ipv6_ra_offload->ipv6_addrs_count * IPADDR_LEN),
+			   (ipv6_ra_offload->ipv6_addrs_count * IPADDR_LEN));
+		ie->len = wlan_cpu_to_le16(16 *
+					   ipv6_ra_offload->ipv6_addrs_count);
 		pcmd->size = wlan_cpu_to_le16(
-			S_DS_GEN + sizeof(HostCmd_DS_IPV6_RA_OFFLOAD));
+			S_DS_GEN + sizeof(HostCmd_DS_IPV6_RA_OFFLOAD) +
+			(IPADDR_LEN * ipv6_ra_cfg->ipv6_addr_count));
 	} else if (cmd_action == HostCmd_ACT_GEN_GET)
 		pcmd->size = wlan_cpu_to_le16(S_DS_GEN +
 					      sizeof(ipv6_ra_cfg->action));
@@ -3885,6 +3890,12 @@ mlan_status wlan_ops_sta_prepare_cmd(t_void *priv, t_u16 cmd_no,
 		break;
 	case HostCmd_CMD_WMM_DELTS_REQ:
 		ret = wlan_cmd_wmm_delts_req(pmpriv, cmd_ptr, pdata_buf);
+		break;
+	case HostCmd_CMD_WMM_HOST_ADDTS_REQ:
+		ret = wlan_cmd_wmm_host_addts_req(pmpriv, cmd_ptr, pdata_buf);
+		break;
+	case HostCmd_CMD_WMM_HOST_DELTS_REQ:
+		ret = wlan_cmd_wmm_host_delts_req(pmpriv, cmd_ptr, pdata_buf);
 		break;
 	case HostCmd_CMD_WMM_QUEUE_CONFIG:
 		ret = wlan_cmd_wmm_queue_config(pmpriv, cmd_ptr, pdata_buf);
