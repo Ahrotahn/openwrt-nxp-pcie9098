@@ -29,6 +29,9 @@ Change log:
 #ifndef _MLAN_IEEE_H_
 #define _MLAN_IEEE_H_
 
+/** WLAN header size */
+#define IEEE80211_HEADER_SIZE 24
+
 /** FIX IES size in beacon buffer */
 #define WLAN_802_11_FIXED_IE_SIZE 12
 /** WLAN supported rates */
@@ -892,8 +895,9 @@ typedef MLAN_PACK_START enum _IEEEtypes_WMM_Tspec_Action_e {
 #define NAN_SRVC_CTRL_OFFSET 11
 /** Service control field */
 #define NAN_SRV_CTRL_TYPE_MASK (BIT(0) | BIT(1))
-/** NAN publish frame */
+/** NAN service control type */
 #define NAN_PUBLISH 0
+#define NAN_FOLLOW_UP 2
 
 /** NAN Attribute ID list */
 typedef MLAN_PACK_START enum _Nan_AttrId_e {

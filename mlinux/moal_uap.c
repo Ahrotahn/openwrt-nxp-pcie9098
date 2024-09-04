@@ -4646,6 +4646,7 @@ int woal_uap_bss_ctrl(moal_private *priv, t_u8 wait_option, int data)
 				PRINTM(MERROR,
 				       "Fail to set mac address after UAP_BSS_RESET\n");
 		}
+		woal_flush_tx_stat_queue(priv);
 		woal_flush_tcp_sess_queue(priv);
 	}
 done:

@@ -293,10 +293,8 @@ static mlan_status wlan_init_dma_cfg_registers(mlan_adapter *pmadapter,
 		if (dma_mode == DMA_MODE_DUAL_DESC) {
 			if (direction == ADMA_HOST_TO_DEVICE) {
 				dma_cfg2 |= ADMA_SRC_DMA_DONE_INT_BYPASS_EN;
-				if (pmadapter->pcard_pcie->pcie_int_mode !=
-				    PCIE_INT_MODE_MSIX)
-					dma_cfg2 |=
-						ADMA_MSI_LEGACY_SRC_DMA_DONE_INT_BYPASS_EN;
+				dma_cfg2 |=
+					ADMA_MSI_LEGACY_SRC_DMA_DONE_INT_BYPASS_EN;
 			} else {
 				/* Read the dma_cfg3 register */
 				if (pcb->moal_read_reg(pmadapter->pmoal_handle,
@@ -316,10 +314,8 @@ static mlan_status wlan_init_dma_cfg_registers(mlan_adapter *pmadapter,
 					ret = MLAN_STATUS_FAILURE;
 				}
 				dma_cfg2 |= ADMA_DST_DMA_DONE_INT_BYPASS_EN;
-				if (pmadapter->pcard_pcie->pcie_int_mode !=
-				    PCIE_INT_MODE_MSIX)
-					dma_cfg2 |=
-						ADMA_MSI_LEGACY_DST_DMA_DONE_INT_BYPASS_EN;
+				dma_cfg2 |=
+					ADMA_MSI_LEGACY_DST_DMA_DONE_INT_BYPASS_EN;
 			}
 		} else {
 			if (direction == ADMA_HOST_TO_DEVICE)
@@ -327,10 +323,7 @@ static mlan_status wlan_init_dma_cfg_registers(mlan_adapter *pmadapter,
 			else
 				dma_cfg2 |= ADMA_DST_ADDR_IS_HOST;
 		}
-		if (pmadapter->pcard_pcie->pcie_int_mode == PCIE_INT_MODE_MSIX)
-			dma_cfg2 |= ADMA_MSIX_ENABLE;
-		else
-			dma_cfg2 |= ADMA_MSI_LEGACY_ENABLE;
+		dma_cfg2 |= ADMA_MSI_LEGACY_ENABLE;
 		PRINTM(MCMND, "dma_cfg2=0x%x\n", dma_cfg2);
 
 		/* enable INT_BYPASS_EN in the dma_cfg2 register */
@@ -404,8 +397,6 @@ static mlan_status wlan_init_adma(mlan_adapter *pmadapter, t_u8 type,
 	t_u32 q_addr = 0;
 	t_u8 direction = 0;
 	t_u8 dma_mode = 0;
-	t_u32 msix_data;
-	t_u32 msix_vector;
 	pmlan_callbacks pcb = &pmadapter->callbacks;
 	ENTER();
 	if (init)
@@ -416,31 +407,26 @@ static mlan_status wlan_init_adma(mlan_adapter *pmadapter, t_u8 type,
 		q_addr = ADMA_CHAN0_Q0;
 		direction = ADMA_HOST_TO_DEVICE;
 		dma_mode = DMA_MODE_DUAL_DESC;
-		msix_vector = ADMA_VECTOR_CHAN0_Q0;
 		break;
 	case ADMA_RX_DATA:
 		q_addr = ADMA_CHAN1_Q0;
 		direction = ADMA_DEVICE_TO_HOST;
 		dma_mode = DMA_MODE_DUAL_DESC;
-		msix_vector = AMDA_VECTOR_CHAN1_Q0;
 		break;
 	case ADMA_EVENT:
 		q_addr = ADMA_CHAN1_Q1;
 		direction = ADMA_DEVICE_TO_HOST;
 		dma_mode = DMA_MODE_DUAL_DESC;
-		msix_vector = AMDA_VECTOR_CHAN1_Q1;
 		break;
 	case ADMA_CMD:
 		q_addr = ADMA_CHAN2_Q0;
 		direction = ADMA_HOST_TO_DEVICE;
 		dma_mode = DMA_MODE_DIRECT;
-		msix_vector = AMDA_VECTOR_CHAN2_Q0;
 		break;
 	case ADMA_CMDRESP:
 		q_addr = ADMA_CHAN2_Q1;
 		direction = ADMA_DEVICE_TO_HOST;
 		dma_mode = DMA_MODE_DIRECT;
-		msix_vector = AMDA_VECTOR_CHAN2_Q1;
 		break;
 	default:
 		PRINTM(MERROR, "unknow adma type\n");
@@ -466,33 +452,6 @@ static mlan_status wlan_init_adma(mlan_adapter *pmadapter, t_u8 type,
 			       "Failed to write ADMA_INT_MAPPING register.\n");
 			ret = MLAN_STATUS_FAILURE;
 			goto done;
-		}
-
-		if (pmadapter->pcard_pcie->pcie_int_mode ==
-		    PCIE_INT_MODE_MSIX) {
-			if (pcb->moal_read_reg(pmadapter->pmoal_handle,
-					       q_addr + ADMA_MSIX_DOORBELL_DATA,
-					       &msix_data)) {
-				PRINTM(MERROR,
-				       "Fail to read DMA MSIX data register\n");
-				ret = MLAN_STATUS_FAILURE;
-				goto done;
-			}
-			msix_data &= ~ADMA_MSIX_VECTOR_MASK;
-			msix_data &= ~ADMA_MSIX_PF_MASK;
-			msix_data |= msix_vector;
-			msix_data |= pmadapter->pcard_pcie->func_num
-				     << ADMA_MSIX_PF_BIT;
-			PRINTM(MCMND, "msix_data=0x%x\n", msix_data);
-			if (pcb->moal_write_reg(pmadapter->pmoal_handle,
-						q_addr +
-							ADMA_MSIX_DOORBELL_DATA,
-						(t_u32)msix_data)) {
-				PRINTM(MERROR,
-				       "Failed to write DMA DOORBELL_DATA.\n");
-				ret = MLAN_STATUS_FAILURE;
-				goto done;
-			}
 		}
 	}
 
@@ -1162,8 +1121,6 @@ static mlan_status wlan_clear_pending_int_status(mlan_adapter *pmadapter)
 
 	ENTER();
 
-	if (pmadapter->pcard_pcie->pcie_int_mode == PCIE_INT_MODE_MSIX)
-		goto done;
 	if (pcb->moal_read_reg(pmadapter->pmoal_handle,
 			       pmadapter->pcard_pcie->reg->reg_host_int_status,
 			       &pcie_ireg)) {
@@ -3096,6 +3053,9 @@ static mlan_status wlan_pcie_process_recv_data(mlan_adapter *pmadapter)
 			ret = MLAN_STATUS_FAILURE;
 			goto done;
 		}
+		if ((pmadapter->ps_state == PS_STATE_SLEEP) ||
+		    (pmadapter->ps_state == PS_STATE_SLEEP_CFM))
+			goto done;
 
 		/* Read the RX ring read pointer set by firmware */
 		if (pcb->moal_read_reg(pmadapter->pmoal_handle, reg_rxbd_rdptr,
@@ -4223,22 +4183,6 @@ static mlan_status wlan_pcie_interrupt(t_u16 msg_id, pmlan_adapter pmadapter)
 		pcb->moal_spin_lock(pmoal_handle, pint_lock);
 		pmadapter->ireg = 1;
 		pcb->moal_spin_unlock(pmoal_handle, pint_lock);
-	} else if (pmadapter->pcard_pcie->pcie_int_mode == PCIE_INT_MODE_MSIX) {
-		pcie_ireg = (1 << msg_id) &
-			    pmadapter->pcard_pcie->reg->host_intr_mask;
-		if (pcie_ireg) {
-			if (!pmadapter->pps_uapsd_mode &&
-			    (pmadapter->ps_state == PS_STATE_SLEEP)) {
-				pmadapter->pm_wakeup_fw_try = MFALSE;
-				pmadapter->ps_state = PS_STATE_AWAKE;
-				pmadapter->pm_wakeup_card_req = MFALSE;
-			}
-		}
-		pcb->moal_spin_lock(pmoal_handle, pint_lock);
-		pmadapter->ireg |= pcie_ireg;
-		pcb->moal_spin_unlock(pmoal_handle, pint_lock);
-
-		PRINTM(MINTR, "ireg: 0x%08x\n", pcie_ireg);
 	} else {
 		wlan_pcie_disable_host_int_mask(pmadapter);
 		if (pcb->moal_read_reg(
@@ -4287,77 +4231,6 @@ static mlan_status wlan_pcie_interrupt(t_u16 msg_id, pmlan_adapter pmadapter)
 }
 
 /**
- *  @brief This function checks the msix interrupt status and
- *  handle it accordingly.
- *
- *  @param pmadapter    A pointer to mlan_adapter structure
- *
- *  @return             MLAN_STATUS_SUCCESS or MLAN_STATUS_FAILURE
- */
-mlan_status wlan_process_msix_int(mlan_adapter *pmadapter)
-{
-	mlan_status ret = MLAN_STATUS_SUCCESS;
-	t_u32 pcie_ireg = 0;
-	pmlan_callbacks pcb = &pmadapter->callbacks;
-
-	ENTER();
-
-	pcb->moal_spin_lock(pmadapter->pmoal_handle, pmadapter->pint_lock);
-	pcie_ireg =
-		pmadapter->ireg & pmadapter->pcard_pcie->reg->host_intr_mask;
-	pmadapter->ireg = 0;
-	pcb->moal_spin_unlock(pmadapter->pmoal_handle, pmadapter->pint_lock);
-
-	if (pcie_ireg & pmadapter->pcard_pcie->reg->host_intr_dnld_done) {
-		PRINTM(MINFO, "<--- DATA sent Interrupt --->\n");
-		wlan_recv_event(wlan_get_priv(pmadapter, MLAN_BSS_ROLE_ANY),
-				MLAN_EVENT_ID_DRV_DEFER_TX_COMPLTE, MNULL);
-	}
-	if (pcie_ireg & pmadapter->pcard_pcie->reg->host_intr_upld_rdy) {
-		PRINTM(MINFO, "Rx DATA\n");
-		pcb->moal_spin_lock(pmadapter->pmoal_handle,
-				    pmadapter->pmlan_rx_lock);
-		pmadapter->pcard_pcie->rx_pending = MTRUE;
-		pcb->moal_spin_unlock(pmadapter->pmoal_handle,
-				      pmadapter->pmlan_rx_lock);
-		wlan_recv_event(wlan_get_priv(pmadapter, MLAN_BSS_ROLE_ANY),
-				MLAN_EVENT_ID_DRV_DEFER_RX_DATA, MNULL);
-		if (wlan_is_tx_pending(pmadapter))
-			wlan_recv_event(
-				wlan_get_priv(pmadapter, MLAN_BSS_ROLE_ANY),
-				MLAN_EVENT_ID_DRV_DEFER_TX_COMPLTE, MNULL);
-	}
-	if (pcie_ireg & pmadapter->pcard_pcie->reg->host_intr_event_rdy) {
-		PRINTM(MINFO, "Rx EVENT\n");
-		wlan_recv_event(wlan_get_priv(pmadapter, MLAN_BSS_ROLE_ANY),
-				MLAN_EVENT_ID_DRV_DEFER_RX_EVENT, MNULL);
-	}
-	if (pcie_ireg & pmadapter->pcard_pcie->reg->host_intr_cmd_done) {
-		if (pmadapter->cmd_sent && !pmadapter->vdll_ctrl.vdll_len) {
-			PRINTM(MINFO, "<--- CMD sent Interrupt --->\n");
-			pmadapter->cmd_sent = MFALSE;
-		}
-		wlan_recv_event(wlan_get_priv(pmadapter, MLAN_BSS_ROLE_ANY),
-				MLAN_EVENT_ID_DRV_DEFER_CMDRESP, MNULL);
-	}
-#if defined(PCIE8997) || defined(PCIE9098) || defined(PCIE9097) ||             \
-	defined(PCIEAW693) || defined(PCIEIW624)
-	if (pmadapter->pcard_pcie->reg->host_intr_cmd_dnld &&
-	    (pcie_ireg & pmadapter->pcard_pcie->reg->host_intr_cmd_dnld)) {
-		pmadapter->pcie_cmd_dnld_int = MTRUE;
-		PRINTM(MINFO, "<--- CMD DNLD DONE Interrupt --->\n");
-		wlan_recv_event(wlan_get_priv(pmadapter, MLAN_BSS_ROLE_ANY),
-				MLAN_EVENT_ID_DRV_DEFER_HANDLING, MNULL);
-	}
-#endif
-	PRINTM(MINFO, "cmd_sent=%d data_sent=%d\n", pmadapter->cmd_sent,
-	       pmadapter->data_sent);
-
-	LEAVE();
-	return ret;
-}
-
-/**
  *  @brief This function checks the interrupt status and
  *  handle it accordingly.
  *
@@ -4373,10 +4246,6 @@ static mlan_status wlan_process_pcie_int_status(mlan_adapter *pmadapter)
 
 	ENTER();
 
-	if (pmadapter->pcard_pcie->pcie_int_mode == PCIE_INT_MODE_MSIX) {
-		wlan_process_msix_int(pmadapter);
-		goto done;
-	}
 	pcb->moal_spin_lock(pmadapter->pmoal_handle, pmadapter->pint_lock);
 	if (pmadapter->pcard_pcie->pcie_int_mode != PCIE_INT_MODE_MSI)
 		pcie_ireg = pmadapter->ireg;
@@ -4457,9 +4326,10 @@ static mlan_status wlan_process_pcie_int_status(mlan_adapter *pmadapter)
 			pcie_ireg &=
 				~pmadapter->pcard_pcie->reg->host_intr_event_rdy;
 			PRINTM(MINFO, "Rx EVENT\n");
+			pmadapter->pcie_event_int = MTRUE;
 			wlan_recv_event(
 				wlan_get_priv(pmadapter, MLAN_BSS_ROLE_ANY),
-				MLAN_EVENT_ID_DRV_DEFER_RX_EVENT, MNULL);
+				MLAN_EVENT_ID_DRV_DEFER_HANDLING, MNULL);
 		}
 		if (pcie_ireg &
 		    pmadapter->pcard_pcie->reg->host_intr_cmd_done) {

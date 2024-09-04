@@ -4,7 +4,7 @@
  * driver.
  *
  *
- * Copyright 2008-2022, 2024 NXP
+ * Copyright 2008-2024, 2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -60,9 +60,6 @@ Change log:
 #include <linux/tcp.h>
 #include <net/tcp.h>
 #include <net/dsfield.h>
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0)
-#include <net/rps.h>
-#endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
 #include <linux/mpls.h>
 #endif
@@ -1240,12 +1237,6 @@ void woal_clean_up(moal_handle *handle)
 #endif
 #endif
 
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-			if (handle->is_nan_timer_set) {
-				woal_cancel_timer(&handle->nan_timer);
-				handle->is_nan_timer_set = MFALSE;
-			}
-#endif
 			// stop bgscan
 #ifdef STA_CFG80211
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)
@@ -1856,37 +1847,6 @@ BOOLEAN woal_ssid_valid(mlan_802_11_ssid *pssid)
 #endif
 	return MTRUE;
 }
-
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-/**
- * @brief Tx management timeout for NAN function
- *
- * @param context A pointer to context
- * @return         N/A
- */
-void woal_nan_timer_func(void *context)
-{
-	moal_handle *handle = (moal_handle *)context;
-	moal_private *priv = handle->priv[handle->remain_bss_index];
-
-	ENTER();
-
-	if (!priv->phandle->nan_cookie) {
-		PRINTM(MWARN, "NAN cookie not set\n");
-		LEAVE();
-		return;
-	}
-
-	PRINTM(MEVENT, "NAN timer started.\n");
-	cfg80211_tx_mgmt_expired(priv->wdev, priv->phandle->nan_cookie,
-				 &priv->phandle->chan, GFP_ATOMIC);
-	priv->phandle->is_nan_timer_set = MFALSE;
-	priv->phandle->nan_cookie = 0;
-
-	LEAVE();
-	return;
-}
-#endif
 
 #if defined(STA_CFG80211) || defined(UAP_CFG80211)
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)
@@ -2549,11 +2509,6 @@ mlan_status woal_init_sw(moal_handle *handle)
 			      handle);
 
 	handle->is_remain_timer_set = MFALSE;
-
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-	woal_initialize_timer(&handle->nan_timer, woal_nan_timer_func, handle);
-#endif
-
 #endif
 #endif
 
@@ -5594,6 +5549,7 @@ moal_private *woal_add_interface(moal_handle *handle, t_u8 bss_index,
 
 	INIT_LIST_HEAD(&priv->tcp_sess_queue);
 	spin_lock_init(&priv->tcp_sess_lock);
+	priv->tcp_sess_cnt = 0;
 #ifdef STA_SUPPORT
 	INIT_LIST_HEAD(&priv->tdls_list);
 	spin_lock_init(&priv->tdls_lock);
@@ -5910,9 +5866,8 @@ void woal_remove_interface(moal_handle *handle, t_u8 bss_index)
 		}
 #endif
 	}
-	woal_flush_tcp_sess_queue(priv);
-
 	woal_flush_tx_stat_queue(priv);
+	woal_flush_tcp_sess_queue(priv);
 #ifdef STA_CFG80211
 	woal_flush_dhcp_discover_queue(priv);
 #endif
@@ -6311,8 +6266,6 @@ void woal_flush_workqueue(moal_handle *handle)
 #endif
 #ifdef PCIE
 	if (IS_PCIE(handle->card_type)) {
-		if (handle->pcie_rx_event_workqueue)
-			flush_workqueue(handle->pcie_rx_event_workqueue);
 		if (handle->pcie_cmd_resp_workqueue)
 			flush_workqueue(handle->pcie_cmd_resp_workqueue);
 		cancel_delayed_work_sync(&handle->pcie_delayed_tx_work);
@@ -6370,11 +6323,6 @@ void woal_terminate_workqueue(moal_handle *handle)
 #endif
 #ifdef PCIE
 	if (IS_PCIE(handle->card_type)) {
-		if (handle->pcie_rx_event_workqueue) {
-			flush_workqueue(handle->pcie_rx_event_workqueue);
-			destroy_workqueue(handle->pcie_rx_event_workqueue);
-			handle->pcie_rx_event_workqueue = NULL;
-		}
 		if (handle->pcie_cmd_resp_workqueue) {
 			flush_workqueue(handle->pcie_cmd_resp_workqueue);
 			destroy_workqueue(handle->pcie_cmd_resp_workqueue);
@@ -7692,8 +7640,11 @@ void woal_flush_tcp_sess_queue(moal_private *priv)
 	list_for_each_entry_safe (tcp_sess, tmp_node, &priv->tcp_sess_queue,
 				  link) {
 		list_del(&tcp_sess->link);
-		if (atomic_read(&tcp_sess->is_timer_set))
+		if (atomic_read(&tcp_sess->is_timer_set)) {
+			spin_unlock_irqrestore(&priv->tcp_sess_lock, flags);
 			woal_cancel_timer(&tcp_sess->ack_timer);
+			spin_lock_irqsave(&priv->tcp_sess_lock, flags);
+		}
 		skb = (struct sk_buff *)tcp_sess->ack_skb;
 		if (skb)
 			dev_kfree_skb_any(skb);
@@ -7702,6 +7653,7 @@ void woal_flush_tcp_sess_queue(moal_private *priv)
 	INIT_LIST_HEAD(&priv->tcp_sess_queue);
 	priv->tcp_ack_drop_cnt = 0;
 	priv->tcp_ack_cnt = 0;
+	priv->tcp_sess_cnt = 0;
 	spin_unlock_irqrestore(&priv->tcp_sess_lock, flags);
 }
 
@@ -7758,6 +7710,7 @@ static void woal_ageout_tcp_sess_queue(moal_private *priv)
 			PRINTM(MDATA, "wlan: ageout TCP seesion %p\n",
 			       tcp_sess);
 			list_del(&tcp_sess->link);
+			priv->tcp_sess_cnt--;
 			if (atomic_read(&tcp_sess->is_timer_set))
 				woal_cancel_timer(&tcp_sess->ack_timer);
 			skb = (struct sk_buff *)tcp_sess->ack_skb;
@@ -7843,23 +7796,18 @@ static void woal_tcp_ack_timer_func(void *context)
  *
  *
  *  @param priv         A pointer to moal_private structure
- *  @param tcp_session  A pointer to tcp_session
+ *  @param skb          A pointer to sk_buffer
+ *  @param pmbuf        A pointer to mlan_buffer
  *  @return         N/A
  */
-static void woal_send_tcp_ack(moal_private *priv, struct tcp_sess *tcp_session)
+static void woal_send_tcp_ack(moal_private *priv, struct sk_buff *skb,
+			      mlan_buffer *pmbuf)
 {
 	mlan_status status;
-	struct sk_buff *skb = (struct sk_buff *)tcp_session->ack_skb;
-	mlan_buffer *pmbuf = (mlan_buffer *)tcp_session->pmbuf;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 29)
 	t_u32 index = 0;
 #endif
 	ENTER();
-	if (atomic_cmpxchg(&tcp_session->is_timer_set, MTRUE, MFALSE)) {
-		woal_cancel_timer(&tcp_session->ack_timer);
-	}
-	tcp_session->ack_skb = NULL;
-	tcp_session->pmbuf = NULL;
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 29)
 	index = skb_get_queue_mapping(skb);
 #endif
@@ -7952,7 +7900,12 @@ static int woal_process_tcp_ack(moal_private *priv, mlan_buffer *pmbuf)
 		if (!tcp_session) {
 			/* check any aging out sessions can be removed */
 			woal_ageout_tcp_sess_queue(priv);
-
+			if (priv->tcp_sess_cnt >= TCP_ACK_MAX_SESS) {
+				PRINTM(MINFO, "tcp_sess_cnt reach limit\n");
+				spin_unlock_irqrestore(&priv->tcp_sess_lock,
+						       flags);
+				goto done;
+			}
 			tcp_session =
 				kmalloc(sizeof(struct tcp_sess), GFP_ATOMIC);
 			if (!tcp_session) {
@@ -7984,6 +7937,7 @@ static int woal_process_tcp_ack(moal_private *priv, mlan_buffer *pmbuf)
 			woal_mod_timer(&tcp_session->ack_timer, MOAL_TIMER_1MS);
 			list_add_tail(&tcp_session->link,
 				      &priv->tcp_sess_queue);
+			priv->tcp_sess_cnt++;
 			spin_unlock_irqrestore(&priv->tcp_sess_lock, flags);
 			ret = HOLD_TCP_ACK;
 			LEAVE();
@@ -8015,9 +7969,32 @@ static int woal_process_tcp_ack(moal_private *priv, mlan_buffer *pmbuf)
 			tcp_session->ack_seq = ack_seq;
 			ret = DROP_TCP_ACK;
 			skb->cb[0]++;
-			if (skb->cb[0] >= priv->tcp_ack_max_hold)
-				woal_send_tcp_ack(priv, tcp_session);
-			spin_unlock_irqrestore(&priv->tcp_sess_lock, flags);
+			if (skb->cb[0] >= priv->tcp_ack_max_hold) {
+				struct sk_buff *ack_skb = NULL;
+				mlan_buffer *ack_pmbuf = NULL;
+				if (atomic_cmpxchg(&tcp_session->is_timer_set,
+						   MTRUE, MFALSE)) {
+					spin_unlock_irqrestore(
+						&priv->tcp_sess_lock, flags);
+					woal_cancel_timer(
+						&tcp_session->ack_timer);
+					spin_lock_irqsave(&priv->tcp_sess_lock,
+							  flags);
+				}
+				ack_skb =
+					(struct sk_buff *)tcp_session->ack_skb;
+				ack_pmbuf = (mlan_buffer *)tcp_session->pmbuf;
+				tcp_session->ack_skb = NULL;
+				tcp_session->pmbuf = NULL;
+				spin_unlock_irqrestore(&priv->tcp_sess_lock,
+						       flags);
+				if (ack_skb && ack_pmbuf)
+					woal_send_tcp_ack(priv, ack_skb,
+							  ack_pmbuf);
+			} else {
+				spin_unlock_irqrestore(&priv->tcp_sess_lock,
+						       flags);
+			}
 			skb = (struct sk_buff *)pmbuf->pdesc;
 			dev_kfree_skb_any(skb);
 			priv->tcp_ack_drop_cnt++;
@@ -8305,7 +8282,7 @@ static void woal_start_xmit(moal_private *priv, struct sk_buff *skb)
 	}
 #endif
 
-	if (priv->enable_tcp_ack_enh == MTRUE) {
+	if (priv->enable_tcp_ack_enh && priv->media_connected) {
 		ret = woal_process_tcp_ack(priv, pmbuf);
 		if (ret)
 			goto done;
@@ -10069,6 +10046,7 @@ t_void woal_send_disconnect_to_system(moal_private *priv,
 	woal_stop_queue(priv->netdev);
 	if (netif_carrier_ok(priv->netdev))
 		netif_carrier_off(priv->netdev);
+	woal_flush_tx_stat_queue(priv);
 	woal_flush_tcp_sess_queue(priv);
 
 #ifdef STA_CFG80211
@@ -11661,8 +11639,7 @@ void woal_moal_debug_info(moal_private *priv, moal_handle *handle, u8 flag)
 	if (IS_PCIE(phandle->card_type)) {
 #ifdef DEBUG_LEVEL1
 		if (phandle->ops.reg_dbg && (drvdbg & (MREG_D | MFW_D))) {
-			if (!phandle->event_fw_dump)
-				phandle->ops.reg_dbg(phandle);
+			phandle->ops.reg_dbg(phandle);
 		}
 #endif
 	}
@@ -11674,18 +11651,15 @@ void woal_moal_debug_info(moal_private *priv, moal_handle *handle, u8 flag)
 #ifdef DEBUG_LEVEL1
 			if (phandle->ops.reg_dbg &&
 			    (drvdbg & (MREG_D | MFW_D))) {
-				if (!phandle->event_fw_dump)
-					phandle->ops.reg_dbg(phandle);
+				phandle->ops.reg_dbg(phandle);
 			}
 #endif
 		} else {
 #ifdef DEBUG_LEVEL1
 			if (drvdbg & (MREG_D | MFW_D)) {
-				if (!phandle->event_fw_dump) {
-					phandle->reg_dbg = MTRUE;
-					queue_work(phandle->workqueue,
-						   &phandle->main_work);
-				}
+				phandle->reg_dbg = MTRUE;
+				queue_work(phandle->workqueue,
+					   &phandle->main_work);
 			}
 #endif
 		}
@@ -12279,28 +12253,6 @@ t_void woal_pcie_tx_complete_work_queue(struct work_struct *work)
 	LEAVE();
 }
 #endif
-
-/**
- *  @brief This workqueue handles rx_event
- *
- *  @param work    A pointer to work_struct
- *
- *  @return        N/A
- */
-t_void woal_pcie_rx_event_work_queue(struct work_struct *work)
-{
-	moal_handle *handle =
-		container_of(work, moal_handle, pcie_rx_event_work);
-	ENTER();
-
-	if (!handle || handle->surprise_removed == MTRUE) {
-		LEAVE();
-		return;
-	}
-
-	mlan_process_pcie_interrupt_cb(handle->pmlan_adapter, RX_EVENT);
-	LEAVE();
-}
 
 /**
  *  @brief This workqueue handles rx_cmdresp
@@ -12909,27 +12861,6 @@ moal_handle *woal_add_card(void *card, struct device *dev, moal_if_ops *if_ops,
 
 #ifdef PCIE
 	if (IS_PCIE(handle->card_type)) {
-#if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 14)
-		/* For kernel less than 2.6.14 name can not be
-		 * greater than 10 characters */
-		handle->pcie_rx_event_workqueue =
-			create_workqueue("MOAL_PCIE_RX_EVENT_WORKQ");
-#else
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 36)
-		handle->pcie_rx_event_workqueue = alloc_workqueue(
-			"MOAL_PCIE_RX_EVENT_WORK_QUEUE",
-			WQ_HIGHPRI | WQ_MEM_RECLAIM | WQ_UNBOUND, 1);
-#else
-		handle->pcie_rx_event_workqueue =
-			create_workqueue("MOAL_PCIE_RX_EVENT_WORK_QUEUE");
-#endif
-#endif
-		if (!handle->pcie_rx_event_workqueue) {
-			woal_terminate_workqueue(handle);
-			goto err_kmalloc;
-		}
-		MLAN_INIT_WORK(&handle->pcie_rx_event_work,
-			       woal_pcie_rx_event_work_queue);
 #if LINUX_VERSION_CODE < KERNEL_VERSION(2, 6, 14)
 		/* For kernel less than 2.6.14 name can not be
 		 * greater than 10 characters */

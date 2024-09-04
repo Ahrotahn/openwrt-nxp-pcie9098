@@ -137,20 +137,6 @@ Change log:
 #define PCIEIW624_DEFAULT_WLAN_FW_NAME "nxp/pcieiw624_wlan.bin"
 #endif /* PCIEIW624 */
 
-#if defined(PCIE9098) || defined(PCIE9097) || defined(PCIEAW693) ||            \
-	defined(PCIEIW624)
-#define PCIE_NUM_MSIX_VECTORS 32
-#else
-#define PCIE_NUM_MSIX_VECTORS 4
-#endif
-
-typedef struct _msix_context {
-	/** pci_dev structure pointer */
-	struct pci_dev *dev;
-	/** message id related to msix vector */
-	t_u16 msg_id;
-} msix_context;
-
 /** Structure: PCIE service card */
 typedef struct _pcie_service_card {
 	/** pci_dev structure pointer */
@@ -165,10 +151,6 @@ typedef struct _pcie_service_card {
 	void __iomem *pci_mmap;
 	/** I/O memory regions pointer to the bus */
 	void __iomem *pci_mmap1;
-#if defined(PCIE)
-	struct msix_entry msix_entries[PCIE_NUM_MSIX_VECTORS];
-	msix_context msix_contexts[PCIE_NUM_MSIX_VECTORS];
-#endif
 } pcie_service_card, *ppcie_service_card;
 
 /** Register to bus driver function */

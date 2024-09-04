@@ -3,7 +3,7 @@
  *  @brief This file contains the handling of AP mode command and event
  *
  *
- *  Copyright 2009-2023 NXP
+ *  Copyright 2009-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -190,6 +190,10 @@ static mlan_status uap_process_cmdresp_error(mlan_private *pmpriv,
 					     mlan_ioctl_req *pioctl_buf)
 {
 	mlan_adapter *pmadapter = pmpriv->adapter;
+#ifdef STA_SUPPORT
+	pmlan_ioctl_req pscan_ioctl_req = MNULL;
+	mlan_callbacks *pcb = MNULL;
+#endif
 #if defined(USB)
 	t_u8 i;
 #endif
@@ -308,6 +312,26 @@ static mlan_status uap_process_cmdresp_error(mlan_private *pmpriv,
 	case HostCmd_CMD_802_11_SCAN_EXT:
 		if (resp->result == HostCmd_RESULT_BUSY)
 			pmadapter->dbg.num_scan_err++;
+		/* Cancel all pending scan command */
+		wlan_flush_scan_queue(pmadapter);
+
+		pcb = (pmlan_callbacks)&pmadapter->callbacks;
+
+		wlan_request_cmd_lock(pmadapter);
+		pmadapter->scan_processing = MFALSE;
+		pscan_ioctl_req = pmadapter->pscan_ioctl_req;
+		pmadapter->pscan_ioctl_req = MNULL;
+		/* Need to indicate IOCTL complete */
+		if (pscan_ioctl_req) {
+			pscan_ioctl_req->status_code = MLAN_ERROR_NO_ERROR;
+			/* Indicate ioctl complete */
+			pcb->moal_ioctl_complete(
+				pmadapter->pmoal_handle,
+				(pmlan_ioctl_req)pscan_ioctl_req,
+				MLAN_STATUS_SUCCESS);
+		}
+		wlan_release_cmd_lock(pmadapter);
+		wlan_recv_event(pmpriv, MLAN_EVENT_ID_DRV_SCAN_REPORT, MNULL);
 		break;
 #endif
 	default:
@@ -1839,7 +1863,7 @@ static mlan_status wlan_uap_cmd_sys_configure(pmlan_private pmpriv,
 			tlv_chan_switch = (MrvlIEtypes_action_chan_switch_t *)
 						  sys_config->tlv_buffer;
 			tlv_chan_switch->header.type = wlan_cpu_to_le16(
-				MRVL_ACTION_CHAN_SWITCH_ANNOUNCE);
+				NXP_ACTION_CHAN_SWITCH_ANNOUNCE);
 			tlv_chan_switch->mode = bss->param.chanswitch.mode;
 			tlv_chan_switch->num_pkt =
 				bss->param.chanswitch.chan_switch_count;
@@ -4528,6 +4552,18 @@ static mlan_status wlan_uap_cmd_add_station(pmlan_private pmpriv,
 		}
 	}
 
+	if (sta_ptr->is_multi_ap) {
+		tlv = (MrvlIEtypesHeader_t *)pos;
+		tlv->type = wlan_cpu_to_le16(VENDOR_SPECIFIC_221);
+		tlv->len = sta_ptr->multi_ap_ie.ieee_hdr.len;
+
+		pos += sizeof(MrvlIEtypesHeader_t);
+		memcpy_ext(pmadapter, pos, (t_u8 *)&sta_ptr->multi_ap_ie.data,
+			   tlv->len, tlv->len);
+		travel_len += sizeof(MrvlIEtypesHeader_t) + tlv->len;
+		tlv->len = wlan_cpu_to_le16(tlv->len);
+	}
+
 	if (sta_ptr->is_11n_enabled) {
 		if (pmpriv->uap_channel <= 14)
 			sta_ptr->bandmode = BAND_GN;
@@ -5061,6 +5097,9 @@ mlan_status wlan_ops_uap_prepare_cmd(t_void *priv, t_u16 cmd_no,
 		ret = wlan_cmd_range_ext(pmpriv, cmd_ptr, cmd_action,
 					 pdata_buf);
 		break;
+	case HostCmd_CMD_TWT_CFG:
+		ret = wlan_cmd_twt_cfg(pmpriv, cmd_ptr, cmd_action, pdata_buf);
+		break;
 	case HostCmd_CMD_RX_ABORT_CFG:
 		ret = wlan_cmd_rxabortcfg(pmpriv, cmd_ptr, cmd_action,
 					  pdata_buf);
@@ -5505,6 +5544,9 @@ mlan_status wlan_ops_uap_process_cmdresp(t_void *priv, t_u16 cmdresp_no,
 		break;
 	case HostCmd_CMD_RANGE_EXT:
 		ret = wlan_ret_range_ext(pmpriv, resp, pioctl_buf);
+		break;
+	case HostCmd_CMD_TWT_CFG:
+		ret = wlan_ret_twt_report(pmpriv, resp, pioctl_buf);
 		break;
 	case HostCmd_CMD_RX_ABORT_CFG:
 		ret = wlan_ret_rxabortcfg(pmpriv, resp, pioctl_buf);

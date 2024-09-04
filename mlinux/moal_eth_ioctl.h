@@ -407,6 +407,10 @@ typedef struct _ssu_params_cfg {
 #define PRIV_CMD_TWT_REPORT "twt_report"
 /** Private command: TWT Information Cfg */
 #define PRIV_CMD_TWT_INFORMATION "twt_information"
+/** Private command: BTWT AP Cfg Set */
+#define PRIV_CMD_BTWT_AP_CONFIG_SET "btwt_AP_config_set"
+/** Private command: BTWT AP Cfg Get */
+#define PRIV_CMD_BTWT_AP_CONFIG_GET "btwt_AP_config_get"
 
 #define PRIV_CMD_LPM "lpm"
 

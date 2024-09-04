@@ -7,7 +7,7 @@
  *  to the firmware.
  *
  *
- *  Copyright 2008-2023 NXP
+ *  Copyright 2008-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -1636,12 +1636,16 @@ mlan_status wlan_ret_802_11_associate(mlan_private *pmpriv,
 	mlan_ds_bss *bss;
 	IEEEtypes_MgmtHdr_t *hdr;
 	t_u16 sub_type = 0;
+	t_u16 assoc_rsp_size = 0;
 
 	ENTER();
 
 	hdr = (IEEEtypes_MgmtHdr_t *)&resp->params;
 	sub_type = IEEE80211_GET_FC_MGMT_FRAME_SUBTYPE(hdr->FrmCtl);
-	if (!memcmp(pmpriv->adapter, hdr->BssId,
+	assoc_rsp_size = resp->size - S_DS_GEN;
+	if ((assoc_rsp_size >=
+	     (sizeof(IEEEtypes_MgmtHdr_t) + sizeof(IEEEtypes_AssocRsp_t))) &&
+	    !memcmp(pmpriv->adapter, hdr->BssId,
 		    pmpriv->curr_bss_params.attemp_bssid,
 		    MLAN_MAC_ADDR_LENGTH) &&
 	    ((sub_type == SUBTYPE_ASSOC_RESP) ||

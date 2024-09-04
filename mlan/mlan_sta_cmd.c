@@ -2593,7 +2593,7 @@ wlan_cmd_packet_aggr_over_host_interface(pmlan_private pmpriv,
 	memset(pmadapter, usb_aggr_param_tlv, 0,
 	       MRVL_USB_AGGR_PARAM_TLV_LEN + sizeof(MrvlIEtypesHeader_t));
 	usb_aggr_param_tlv->header.type =
-		wlan_cpu_to_le16(MRVL_USB_AGGR_PARAM_TLV_ID);
+		wlan_cpu_to_le16(NXP_USB_AGGR_PARAM_TLV_ID);
 	usb_aggr_param_tlv->header.len =
 		wlan_cpu_to_le16(MRVL_USB_AGGR_PARAM_TLV_LEN);
 	cmd->size = wlan_cpu_to_le16(
@@ -2698,7 +2698,8 @@ mlan_status wlan_cmd_net_monitor(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 	net_mon = (mlan_ds_misc_net_monitor *)pdata_buf;
 
 	cmd->size = wlan_cpu_to_le16(S_DS_GEN +
-				     sizeof(HostCmd_DS_802_11_NET_MONITOR));
+				     sizeof(HostCmd_DS_802_11_NET_MONITOR) +
+				     sizeof(ChanBandParamSet_t));
 	cmd->command = wlan_cpu_to_le16(cmd->command);
 	cmd_net_mon->action = wlan_cpu_to_le16(cmd_action);
 	if (cmd_action == HostCmd_ACT_GEN_SET) {

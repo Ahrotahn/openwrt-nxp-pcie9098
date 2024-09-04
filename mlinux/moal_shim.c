@@ -2690,11 +2690,6 @@ static mlan_status wlan_process_defer_event(moal_handle *handle,
 		queue_work(handle->pcie_rx_workqueue, &handle->pcie_rx_work);
 #endif
 		break;
-	case MLAN_EVENT_ID_DRV_DEFER_RX_EVENT:
-		status = MLAN_STATUS_SUCCESS;
-		queue_work(handle->pcie_rx_event_workqueue,
-			   &handle->pcie_rx_event_work);
-		break;
 	case MLAN_EVENT_ID_DRV_DEFER_CMDRESP:
 		status = MLAN_STATUS_SUCCESS;
 		queue_work(handle->pcie_cmd_resp_workqueue,
@@ -2944,6 +2939,8 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 			handle->is_fw_dump_timer_set = MTRUE;
 			woal_mod_timer(&handle->fw_dump_timer, MOAL_TIMER_5S);
 		}
+		handle->init_wait_q_woken = MTRUE;
+		wake_up(&handle->init_wait_q);
 		woal_store_firmware_dump(pmoal, pmevent);
 		handle->driver_status = MTRUE;
 		wifi_status = WIFI_STATUS_FW_DUMP;
@@ -4048,12 +4045,13 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 			PRINTM(MMSG,
 			       "Channel Under Nop: notify cfg80211 new channel=%d\n",
 			       priv->channel);
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
-			cfg80211_ch_switch_notify(priv->netdev, &priv->chan, 0);
-#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 3, 0) &&                        \
+	CFG80211_VERSION_CODE < KERNEL_VERSION(6, 9, 0)
 			cfg80211_ch_switch_notify(priv->netdev, &priv->chan, 0,
 						  0);
-#elif ((CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && IMX_ANDROID_13))
+#elif ((CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) &&                    \
+	IMX_ANDROID_13)) &&                                                    \
+	CFG80211_VERSION_CODE < KERNEL_VERSION(6, 9, 0)
 			cfg80211_ch_switch_notify(priv->netdev, &priv->chan, 0,
 						  0);
 #elif ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 19, 2)) ||                  \
@@ -4698,6 +4696,17 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 							tx_info->tx_cookie,
 							skb->data, skb->len,
 							ack, GFP_ATOMIC);
+#endif
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
+				if (tx_info->send_tx_expired) {
+					PRINTM(MINFO,
+					       "NAN: send tx duration expired for cookie=%llx\n",
+					       tx_info->tx_cookie);
+					cfg80211_tx_mgmt_expired(
+						priv->wdev, tx_info->tx_cookie,
+						&priv->phandle->chan,
+						GFP_ATOMIC);
+				}
 #endif
 #endif
 			}

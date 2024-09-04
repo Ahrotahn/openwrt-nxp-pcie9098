@@ -2127,6 +2127,9 @@ mlan_status wlan_ops_uap_ioctl(t_void *adapter, pmlan_ioctl_req pioctl_req)
 				pget_info->param.fw_info.force_reg = MTRUE;
 			else
 				pget_info->param.fw_info.force_reg = MFALSE;
+			/**country code from OTP */
+			pget_info->param.fw_info.fw_country_code =
+				pmadapter->fw_country_code;
 			pget_info->param.fw_info.fw_supplicant_support =
 				IS_FW_SUPPORT_SUPPLICANT(pmadapter) ? 0x01 :
 								      0x00;

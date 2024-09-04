@@ -428,6 +428,101 @@ error:
 	return ret;
 }
 
+#define MAC_STRING_LENGTH 17
+/**
+ * @brief      extracts llde pkt filter specific parameters from llde.conf file
+ *
+ *
+ *  @param priv    Pointer to the mlan_private driver data struct
+ *  @param respbuf      A pointer to response buffer
+ *  @param param_buf   A pointer to mlan_ds_11ax_llde_pkt_filter_cmd struct
+ *
+ *  @return         returns 0
+ */
+static int woal_set_priv_11axcmdcfg_llde_pkt_filer_cmd(
+	moal_private *priv, t_u8 *respbuf,
+	mlan_ds_11ax_llde_pkt_filter_cmd *param_buf)
+{
+	t_u8 *llde_pkt_filter_pos = NULL;
+	int llde_cfg_len = 0, llde_pkt_filter_len = 0;
+	t_u8 mac_pos[MAC_STRING_LENGTH] = {0};
+	t_u8 peer_mac[ETH_ALEN] = {0};
+	t_u8 convert_int[2] = {0};
+	int tmp_val = 0;
+	t_u8 *tmp_pos = NULL;
+
+	/* if llde device_filter or macfilter is not present in config file then
+	 * return */
+	if (strstr(respbuf, "device_filter") == NULL) {
+		if (strstr(respbuf, "macfilter") == NULL)
+			return 0;
+	}
+
+	llde_pkt_filter_pos = strstr(respbuf, "device_filter");
+	if (llde_pkt_filter_pos) {
+		llde_cfg_len =
+			(strlen(respbuf) - (strlen(llde_pkt_filter_pos) + 1));
+		llde_pkt_filter_len = strlen(llde_pkt_filter_pos);
+	}
+
+	llde_pkt_filter_pos = llde_pkt_filter_pos + strlen("device_filter=");
+	if (llde_pkt_filter_pos) {
+		moal_memcpy_ext(priv->phandle, (t_u8 *)convert_int,
+				(t_u8 *)llde_pkt_filter_pos, 1, 1);
+		(void)woal_atoi(&tmp_val, convert_int);
+		param_buf->device_filter = tmp_val;
+	}
+
+	llde_pkt_filter_pos = strstr(respbuf, "macfilter1");
+	if (llde_pkt_filter_pos)
+		llde_pkt_filter_pos =
+			llde_pkt_filter_pos + strlen("macfilter1=");
+
+	tmp_pos = llde_pkt_filter_pos + MAC_STRING_LENGTH; 
+	if (llde_pkt_filter_pos && tmp_pos) {
+		moal_memcpy_ext(priv->phandle, (t_u8 *)mac_pos,
+				(t_u8 *)llde_pkt_filter_pos, MAC_STRING_LENGTH,
+				MAC_STRING_LENGTH);
+		woal_mac2u8(peer_mac, mac_pos);
+		moal_memcpy_ext(priv->phandle, (t_u8 *)&param_buf->macfilter1,
+				(t_u8 *)peer_mac, ETH_ALEN, ETH_ALEN);
+	}
+
+	llde_pkt_filter_pos = strstr(respbuf, "macfilter2");
+	if (llde_pkt_filter_pos)
+		llde_pkt_filter_pos =
+			llde_pkt_filter_pos + strlen("macfilter2=");
+
+	tmp_pos = llde_pkt_filter_pos + MAC_STRING_LENGTH;
+	if (llde_pkt_filter_pos && tmp_pos) {
+		moal_memcpy_ext(priv->phandle, (t_u8 *)mac_pos,
+				(t_u8 *)llde_pkt_filter_pos, MAC_STRING_LENGTH,
+				MAC_STRING_LENGTH);
+		woal_mac2u8(peer_mac, mac_pos);
+		moal_memcpy_ext(priv->phandle, (t_u8 *)&param_buf->macfilter2,
+				(t_u8 *)peer_mac, ETH_ALEN, ETH_ALEN);
+	}
+
+	llde_pkt_filter_pos = strstr(respbuf, "packet_type");
+	if (llde_pkt_filter_pos)
+		llde_pkt_filter_pos =
+			llde_pkt_filter_pos + strlen("packet_type=");
+
+	if (llde_pkt_filter_pos) {
+		moal_memcpy_ext(priv->phandle, (t_u8 *)convert_int,
+				(t_u8 *)llde_pkt_filter_pos, 1, 1);
+		(void)woal_atoi(&tmp_val, convert_int);
+		param_buf->packet_type = tmp_val;
+	}
+
+	/* remove llde_pkt_filter parameters from respbuf as they are parsed
+	above, respbuf will contain llde cfg parameters only which will be later
+	parsed via parse_arguments() */
+	memset(respbuf + llde_cfg_len, 0, llde_pkt_filter_len);
+
+	LEAVE();
+	return 0;
+}
 /**
  * @brief               configure 11ax HE capability or HE operation
  *
@@ -444,13 +539,24 @@ static int woal_setget_priv_11axcmdcfg(moal_private *priv, t_u8 *respbuf,
 {
 	mlan_ioctl_req *req = NULL;
 	mlan_ds_11ax_cmd_cfg *cfg = NULL;
+	mlan_ds_11ax_llde_pkt_filter_cmd llde_pkt_filter = {0};
 	int ret = 0;
 	mlan_status status = MLAN_STATUS_SUCCESS;
 	int header_len = 0, user_data_len = 0;
 	int data[10] = {0};
+	int llde_total_len = 0, alloc_len = 0, mlan_ds_11ax_cmd_cfg_header = 0;
 	ENTER();
 
-	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_11ax_cmd_cfg));
+	llde_total_len = sizeof(mlan_ds_11ax_llde_cmd) +
+			 sizeof(mlan_ds_11ax_llde_pkt_filter_cmd);
+	mlan_ds_11ax_cmd_cfg_header =
+		sizeof(t_u32 /*sub_command*/) + sizeof(t_u32 /*sub_id*/);
+	llde_total_len += mlan_ds_11ax_cmd_cfg_header;
+	alloc_len = sizeof(mlan_ds_11ax_cmd_cfg) > llde_total_len ?
+			    sizeof(mlan_ds_11ax_cmd_cfg) :
+			    llde_total_len;
+
+	req = woal_alloc_mlan_ioctl_req(alloc_len);
 	if (req == NULL) {
 		ret = -ENOMEM;
 		goto done;
@@ -461,6 +567,9 @@ static int woal_setget_priv_11axcmdcfg(moal_private *priv, t_u8 *respbuf,
 
 	cfg = (mlan_ds_11ax_cmd_cfg *)req->pbuf;
 	cfg->sub_command = MLAN_OID_11AX_CMD_CFG;
+
+	woal_set_priv_11axcmdcfg_llde_pkt_filer_cmd(priv, respbuf,
+						    &llde_pkt_filter);
 
 	parse_arguments(respbuf + header_len, data, ARRAY_SIZE(data),
 			&user_data_len);
@@ -526,6 +635,17 @@ static int woal_setget_priv_11axcmdcfg(moal_private *priv, t_u8 *respbuf,
 		cfg->param.llde_cfg.pollinterval = data[7];
 		cfg->param.llde_cfg.txOpDuration = data[8];
 		cfg->param.llde_cfg.llde_ctrl = data[9];
+
+		/* append llde packet filter parameters to ioctl buffer */
+		if (cfg->param.llde_cfg.llde) {
+			moal_memcpy_ext(
+				priv->phandle,
+				req->pbuf + mlan_ds_11ax_cmd_cfg_header +
+					sizeof(mlan_ds_11ax_llde_cmd),
+				&llde_pkt_filter,
+				sizeof(mlan_ds_11ax_llde_pkt_filter_cmd),
+				sizeof(mlan_ds_11ax_llde_pkt_filter_cmd));
+		}
 		break;
 	case MLAN_11AXCMD_CFG_ID_RUTXPWR:
 		cfg->sub_id = MLAN_11AXCMD_RUTXSUBPWR_SUBID;
@@ -7673,7 +7793,20 @@ done:
 }
 
 /**
- *  @brief              Get TX/RX histogram statistic
+ *  @brief             	check if 6GHz sub band supported
+ *
+ *  @param priv         A pointer to moal_private structure
+ *
+ *  @return             if supported return 1; otherwise 0
+ */
+static t_u8 woal_is_6g_sub_band_allowed(moal_private *priv)
+{
+	t_u8 ret = MFALSE;
+	return ret;
+}
+
+/**
+ *  @brief              Get Tx power limit table from the FW
  *
  *  @param priv         A pointer to moal_private structure
  *  @param respbuf      A pointer to response buffer
@@ -7705,6 +7838,12 @@ static int woal_priv_get_txpwrlimit(moal_private *priv, t_u8 *respbuf,
 		PRINTM(MERROR, "Invalid subband=0x%x\n", trpc_cfg->sub_band);
 		ret = -EINVAL;
 		goto done;
+	}
+	if (trpc_cfg->sub_band >= 0x20 && trpc_cfg->sub_band <= 0x27) {
+		if (!woal_is_6g_sub_band_allowed(priv)) {
+			ret = -EINVAL;
+			goto done;
+		}
 	}
 	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_misc_cfg));
 	if (req == NULL) {
@@ -11507,6 +11646,8 @@ static int woal_priv_net_monitor_ioctl(moal_private *priv, t_u8 *respbuf,
 	data[0] = net_mon->enable_net_mon;
 	data[1] = net_mon->filter_flag;
 	data[2] = net_mon->band;
+	if (handle->mon_if)
+		data[2] = handle->mon_if->band_chan_cfg.band;
 	data[3] = net_mon->channel;
 	data[4] = net_mon->chan_bandwidth;
 	data_length = 5;
@@ -15016,10 +15157,17 @@ static int woal_priv_csi_cmd(moal_private *priv, t_u8 *respbuf,
 
 	cfg->param.csi_params.csi_enable = data_ptr->csi_enable;
 	if (data_ptr->csi_enable == 1) {
-		cfg->param.csi_params.head_id = data_ptr->head_id;
-		cfg->param.csi_params.tail_id = data_ptr->tail_id;
+		cfg->param.csi_params.head_id =
+			woal_cpu_to_le32(data_ptr->head_id);
+		cfg->param.csi_params.tail_id =
+			woal_cpu_to_le32(data_ptr->tail_id);
 		cfg->param.csi_params.csi_filter_cnt = data_ptr->csi_filter_cnt;
 		cfg->param.csi_params.chip_id = data_ptr->chip_id;
+		cfg->param.csi_params.band_config = data_ptr->band_config;
+		cfg->param.csi_params.channel = data_ptr->channel;
+		cfg->param.csi_params.csi_monitor_enable =
+			data_ptr->csi_monitor_enable;
+		cfg->param.csi_params.ra4us = data_ptr->ra4us;
 		if (cfg->param.csi_params.csi_filter_cnt > CSI_FILTER_MAX)
 			cfg->param.csi_params.csi_filter_cnt = CSI_FILTER_MAX;
 		moal_memcpy_ext(priv->phandle, cfg->param.csi_params.csi_filter,
@@ -15304,6 +15452,118 @@ static int woal_priv_twt_information(moal_private *priv, t_u8 *respbuf,
 	}
 
 	ret = sizeof(mlan_ds_twt_information);
+done:
+	if (status != MLAN_STATUS_PENDING) {
+		kfree(req);
+	}
+	LEAVE();
+	return ret;
+}
+
+/**
+ * @brief               Configure BTWT AP config
+ *
+ * @param priv          Pointer to the mlan_private driver data struct
+ * @param respbuf       A pointer to response buffer
+ * @param len           Length used
+ * @param respbuflen    Available length of response buffer
+ *
+ * @return              Number of bytes written if successful else negative
+ * value
+ */
+static int woal_priv_btwt_ap_config_set(moal_private *priv, t_u8 *respbuf,
+					t_u8 len, t_u32 respbuflen)
+{
+	mlan_ioctl_req *req = NULL;
+	mlan_ds_twtcfg *cfg = NULL;
+	int ret = 0;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+
+	ENTER();
+
+	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_twtcfg));
+	if (req == NULL) {
+		PRINTM(MERROR, "Failed to allocate ioctl_req!\n");
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	req->req_id = MLAN_IOCTL_11AX_CFG;
+	req->action = MLAN_ACT_SET;
+	cfg = (mlan_ds_twtcfg *)req->pbuf;
+	cfg->sub_command = MLAN_OID_11AX_TWT_CFG;
+	cfg->sub_id = MLAN_11AX_BTWT_AP_CONFIG_SUBID;
+
+	if (len) {
+		moal_memcpy_ext(priv->phandle,
+				(t_u8 *)&cfg->param.btwt_ap_config, respbuf,
+				len, sizeof(mlan_ds_btwt_ap_config));
+	}
+
+	status = woal_request_ioctl(priv, req, MOAL_IOCTL_WAIT);
+	if (status != MLAN_STATUS_SUCCESS) {
+		PRINTM(MERROR, "woal_request_ioctl failed!\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	ret = sizeof(mlan_ds_btwt_ap_config);
+done:
+	if (status != MLAN_STATUS_PENDING) {
+		kfree(req);
+	}
+	LEAVE();
+	return ret;
+}
+
+/**
+ * @brief               Configure BTWT AP config
+ *
+ * @param priv          Pointer to the mlan_private driver data struct
+ * @param respbuf       A pointer to response buffer
+ * @param len           Length used
+ * @param respbuflen    Available length of response buffer
+ *
+ * @return              Number of bytes written if successful else negative
+ * value
+ */
+static int woal_priv_btwt_ap_config_get(moal_private *priv, t_u8 *respbuf,
+					t_u8 len, t_u32 respbuflen)
+{
+	mlan_ioctl_req *req = NULL;
+	mlan_ds_twtcfg *cfg = NULL;
+	int ret = 0;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+
+	ENTER();
+
+	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_twtcfg));
+	if (req == NULL) {
+		PRINTM(MERROR, "Failed to allocate ioctl_req!\n");
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	req->req_id = MLAN_IOCTL_11AX_CFG;
+	req->action = MLAN_ACT_GET;
+	cfg = (mlan_ds_twtcfg *)req->pbuf;
+	cfg->sub_command = MLAN_OID_11AX_TWT_CFG;
+	cfg->sub_id = MLAN_11AX_BTWT_AP_CONFIG_SUBID;
+
+	if (len) {
+		moal_memcpy_ext(priv->phandle,
+				(t_u8 *)&cfg->param.btwt_ap_config, respbuf,
+				len, sizeof(mlan_ds_btwt_ap_config));
+	}
+
+	status = woal_request_ioctl(priv, req, MOAL_IOCTL_WAIT);
+	if (status != MLAN_STATUS_SUCCESS) {
+		PRINTM(MERROR, "woal_request_ioctl failed!\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	ret = sizeof(mlan_ds_btwt_ap_config);
 done:
 	if (status != MLAN_STATUS_PENDING) {
 		kfree(req);
@@ -21408,6 +21668,32 @@ int woal_android_priv_cmd(struct net_device *dev, struct ifreq *req)
 			len = woal_priv_twt_information(priv, pdata, len,
 							priv_cmd.total_len);
 			len += strlen(PRIV_CMD_TWT_INFORMATION) +
+			       strlen(CMD_NXP);
+			goto handled;
+		} else if (strnicmp(buf + strlen(CMD_NXP),
+				    PRIV_CMD_BTWT_AP_CONFIG_SET,
+				    strlen(PRIV_CMD_BTWT_AP_CONFIG_SET)) == 0) {
+			pdata = buf + strlen(CMD_NXP) +
+				strlen(PRIV_CMD_BTWT_AP_CONFIG_SET);
+			len = priv_cmd.used_len -
+			      strlen(PRIV_CMD_BTWT_AP_CONFIG_SET) -
+			      strlen(CMD_NXP);
+			len = woal_priv_btwt_ap_config_set(priv, pdata, len,
+							   priv_cmd.total_len);
+			len += strlen(PRIV_CMD_BTWT_AP_CONFIG_SET) +
+			       strlen(CMD_NXP);
+			goto handled;
+		} else if (strnicmp(buf + strlen(CMD_NXP),
+				    PRIV_CMD_BTWT_AP_CONFIG_GET,
+				    strlen(PRIV_CMD_BTWT_AP_CONFIG_GET)) == 0) {
+			pdata = buf + strlen(CMD_NXP) +
+				strlen(PRIV_CMD_BTWT_AP_CONFIG_GET);
+			len = priv_cmd.used_len -
+			      strlen(PRIV_CMD_BTWT_AP_CONFIG_GET) -
+			      strlen(CMD_NXP);
+			len = woal_priv_btwt_ap_config_get(priv, pdata, len,
+							   priv_cmd.total_len);
+			len += strlen(PRIV_CMD_BTWT_AP_CONFIG_GET) +
 			       strlen(CMD_NXP);
 			goto handled;
 

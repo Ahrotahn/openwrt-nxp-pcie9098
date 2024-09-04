@@ -3,7 +3,7 @@
  * @brief This file contains functions for debug proc file.
  *
  *
- * Copyright 2008-2022 NXP
+ * Copyright 2008-2024 NXP
  *
  * This software file (the File) is distributed by NXP
  * under the terms of the GNU General Public License Version 2, June 1991
@@ -78,6 +78,14 @@ static struct debug_data items[] = {
 	 item_addr(mlan_rx_processing), INFO_ADDR},
 	{"rx_pkts_queued", item_size(rx_pkts_queued), item_addr(rx_pkts_queued),
 	 INFO_ADDR},
+#ifdef PCIE
+	{"pcie_event_processing", item_size(pcie_event_processing),
+	 item_addr(pcie_event_processing), INFO_ADDR},
+	{"pcie_rx_processing", item_size(pcie_rx_processing),
+	 item_addr(pcie_rx_processing), INFO_ADDR},
+	{"pcie_tx_processing", item_size(pcie_tx_processing),
+	 item_addr(pcie_tx_processing), INFO_ADDR},
+#endif
 	{"wmm_ac_vo", item_size(wmm_ac_vo), item_addr(wmm_ac_vo), INFO_ADDR},
 	{"wmm_ac_vi", item_size(wmm_ac_vi), item_addr(wmm_ac_vi), INFO_ADDR},
 	{"wmm_ac_be", item_size(wmm_ac_be), item_addr(wmm_ac_be), INFO_ADDR},
@@ -286,6 +294,14 @@ static struct debug_data uap_items[] = {
 	 item_addr(mlan_rx_processing), INFO_ADDR},
 	{"rx_pkts_queued", item_size(rx_pkts_queued), item_addr(rx_pkts_queued),
 	 INFO_ADDR},
+#ifdef PCIE
+	{"pcie_event_processing", item_size(pcie_event_processing),
+	 item_addr(pcie_event_processing), INFO_ADDR},
+	{"pcie_rx_processing", item_size(pcie_rx_processing),
+	 item_addr(pcie_rx_processing), INFO_ADDR},
+	{"pcie_tx_processing", item_size(pcie_tx_processing),
+	 item_addr(pcie_tx_processing), INFO_ADDR},
+#endif
 	{"wmm_ac_vo", item_size(wmm_ac_vo), item_addr(wmm_ac_vo), INFO_ADDR},
 	{"wmm_ac_vi", item_size(wmm_ac_vi), item_addr(wmm_ac_vi), INFO_ADDR},
 	{"wmm_ac_be", item_size(wmm_ac_be), item_addr(wmm_ac_be), INFO_ADDR},
@@ -1091,6 +1107,7 @@ static int woal_debug_read(struct seq_file *sfp, void *data)
 	seq_printf(sfp, "tcp_ack_drop_cnt=%d\n", priv->tcp_ack_drop_cnt);
 	seq_printf(sfp, "tcp_ack_cnt=%d\n", priv->tcp_ack_cnt);
 	seq_printf(sfp, "tcp_ack_payload=%d\n", priv->tcp_ack_payload);
+	seq_printf(sfp, "tcp_sess_cnt=%d\n", priv->tcp_sess_cnt);
 #if LINUX_VERSION_CODE > KERNEL_VERSION(2, 6, 29)
 	for (i = 0; i < 4; i++)
 		seq_printf(sfp, "wmm_tx_pending[%d]:%d\n", i,

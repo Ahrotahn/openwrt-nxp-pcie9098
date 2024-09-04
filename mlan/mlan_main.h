@@ -1578,6 +1578,8 @@ struct _sta_node {
 	IEEEtypes_HECap_t tdls_he_cap;
 	/** HE Operations IE */
 	IEEEtypes_HeOp_t he_op;
+	IEEEtypes_Generic_t multi_ap_ie;
+	t_u8 is_multi_ap;
 	/** wapi key on off flag */
 	t_u8 wapi_key_on;
 	/** tx pause status */
@@ -1587,6 +1589,8 @@ struct _sta_node {
 	sta_stats stats;
 	/** station aid */
 	t_u16 aid;
+	/** apple device based on OUI in assoc req */
+	t_u8 is_apple_sta;
 };
 
 /** 802.11h State information kept in the 'mlan_adapter' driver structure */
@@ -2385,6 +2389,8 @@ struct _mlan_adapter {
 	t_u8 pcie_tx_processing;
 	/** pcie cmd_dnld_int flag */
 	t_u8 pcie_cmd_dnld_int;
+	/** pcie event_int flag */
+	t_u8 pcie_event_int;
 	/** more_tx_task_flag */
 	t_u8 more_tx_task_flag;
 	/** more event flag */
@@ -2611,6 +2617,8 @@ struct _mlan_adapter {
 	wlan_802_11d_domain_reg_t domain_reg;
 	/** Country Code */
 	t_u8 country_code[COUNTRY_CODE_LEN];
+	/**country code from OTP*/
+	t_u16 fw_country_code;
 	/** FSM variable for 11h support */
 	wlan_11h_device_state_t state_11h;
 	/** FSM variable for DFS support */
@@ -2926,6 +2934,10 @@ struct _mlan_adapter {
 	t_u8 remain_on_channel;
 	t_u8 llde_enabled;
 	t_u8 llde_mode;
+	t_u8 llde_packet_type;
+	t_u8 llde_device_filter;
+	t_u8 llde_macfilter1[MLAN_MAC_ADDR_LENGTH];
+	t_u8 llde_macfilter2[MLAN_MAC_ADDR_LENGTH];
 };
 
 /** Check if stream 2X2 enabled */
@@ -2953,6 +2965,19 @@ struct _mlan_adapter {
 #define MLAN_IP_PROTOCOL_ICMP (0x01)
 /** IP packet Protocol number offset */
 #define MLAN_IP_PROTOCOL_OFFSET (11)
+
+/** IP packet Protocol number for TCP */
+#define MLAN_IP_PROTOCOL_TCP (0x06)
+/** IP packet Protocol number for UDP */
+#define MLAN_IP_PROTOCOL_UDP (0x11)
+
+#define LLDE_FILTER_PKT_ALL 0
+#define LLDE_FILTER_PKT_ICMP_PING 1
+#define LLDE_FILTER_PKT_TCP_ACK 2
+#define LLDE_FILTER_PKT_TCP_DATA 4
+#define LLDE_FILTER_PKT_UDP 8
+#define MLAN_TCP_ACK_OFFSET 24
+#define MLAN_TCP_ACK_HEADER_LEN 52
 
 /** Rx packet Sniffer Operation Mode
  *

@@ -1902,6 +1902,49 @@ woal_cfg80211_connect_scan(moal_private *priv,
 	return ret;
 }
 
+/**
+ *  @brief This function check if scan is allowed o/n specified band
+ *
+ *  @param priv     A pointer to moal_private structure
+ *  @param chan     ieee80211_channel
+ *
+ *  @return           MTRUE/MFALSE
+ */
+static t_u8 is_scan_band_allowed(moal_private *priv,
+				 struct ieee80211_channel *chan)
+{
+	t_u8 ret = MTRUE;
+	t_u8 band_mask = 0;
+
+	ENTER();
+	if (!priv->scan_setband_mask) {
+		LEAVE();
+		return ret;
+	}
+
+	switch (chan->band) {
+	case IEEE80211_BAND_5GHZ:
+		band_mask = SCAN_SETBAND_5G;
+		break;
+	case IEEE80211_BAND_2GHZ:
+		band_mask = SCAN_SETBAND_2G;
+		break;
+	default:
+		break;
+	}
+
+	if (band_mask & priv->scan_setband_mask) {
+		ret = MTRUE;
+	} else {
+		PRINTM(MINFO, "is_scan_band_allowed: Avoid scan on band %d\n",
+		       chan->band);
+		ret = MFALSE;
+	}
+
+	LEAVE();
+	return ret;
+}
+
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 /**
  * @brief Save assoc parameters for roaming
@@ -2175,6 +2218,10 @@ static int woal_cfg80211_authenticate(struct wiphy *wiphy,
 
 	ENTER();
 
+	if (!is_scan_band_allowed(priv, req->bss->channel)) {
+		LEAVE();
+		return -EFAULT;
+	}
 #ifdef REASSOCIATION
 	// disable reassoc_on
 	handle->reassoc_on &= ~MBIT(priv->bss_index);
@@ -3038,7 +3085,8 @@ done:
 		       priv->netdev->name, MAC2STR(req->bss->bssid));
 		if (ssid_bssid->assoc_rsp.assoc_resp_len &&
 		    ssid_bssid->assoc_rsp.assoc_resp_len >
-			    sizeof(IEEEtypes_MgmtHdr_t)) {
+			    (sizeof(IEEEtypes_MgmtHdr_t) +
+			     sizeof(IEEEtypes_AssocRsp_t))) {
 			// save the connection param when send assoc_resp to
 			// kernel
 			woal_save_assoc_params(priv, req, ssid_bssid);
@@ -3974,6 +4022,57 @@ create_custom_regdomain(moal_private *priv,
 }
 
 /**
+ *  @brief get channel region config(0x242),update otp_region including
+ * force_reg
+ *
+ *  @param priv         A pointer to moal_private structure
+ *
+ *  @return		        0-success, otherwise failure
+ */
+
+static int woal_get_chan_region_cfg(moal_private *priv)
+{
+	mlan_ds_misc_cfg *misc = NULL;
+	mlan_ioctl_req *req = NULL;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+	t_u8 country_code[COUNTRY_CODE_LEN];
+	int ret = 0;
+
+	ENTER();
+
+	memset(country_code, 0, sizeof(country_code));
+	country_code[0] = priv->phandle->country_code[0];
+	country_code[1] = priv->phandle->country_code[1];
+
+	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_misc_cfg));
+	if (req == NULL) {
+		ret = -ENOMEM;
+		goto done;
+	}
+	misc = (mlan_ds_misc_cfg *)req->pbuf;
+	misc->sub_command = MLAN_OID_MISC_GET_CHAN_REGION_CFG;
+	req->req_id = MLAN_IOCTL_MISC_CFG;
+	req->action = MLAN_ACT_GET;
+	memset(&misc->param.custom_reg_domain, 0,
+	       sizeof(misc->param.custom_reg_domain));
+
+	misc->param.custom_reg_domain.region.country_code[0] = country_code[0];
+	misc->param.custom_reg_domain.region.country_code[1] = country_code[1];
+
+	status = woal_request_ioctl(priv, req, MOAL_IOCTL_WAIT);
+	if (status != MLAN_STATUS_SUCCESS) {
+		ret = -EFAULT;
+		goto done;
+	}
+
+done:
+	if (status != MLAN_STATUS_PENDING)
+		kfree(req);
+	LEAVE();
+	return ret;
+}
+
+/**
  *  @brief create custom channel regulatory config
  *
  *  @param priv         A pointer to moal_private structure
@@ -4361,47 +4460,50 @@ static t_u8 wlan_check_scan_table_ageout(moal_private *priv)
 	LEAVE();
 	return MTRUE;
 }
+
 /**
- *  @brief This function check if scan is allowed on specified band
+ * @brief Cancel remain on channel before scan request process
+
+ * @param priv            A pointer to moal_private
  *
- *  @param priv     A pointer to moal_private structure
- *  @param chan     ieee80211_channel
- *
- *  @return           MTRUE/MFALSE
+ * @return                none
  */
-static t_u8 is_scan_band_allowed(moal_private *priv,
-				 struct ieee80211_channel *chan)
+static void woal_cancel_remain_on_channel(moal_private *priv)
 {
-	t_u8 ret = MTRUE;
-	t_u8 band_mask = 0;
-
-	ENTER();
-	if (!priv->scan_setband_mask) {
-		LEAVE();
-		return ret;
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(2, 6, 39)
+	if (priv->phandle->remain_on_channel) {
+		t_u8 channel_status;
+		moal_private *remain_priv;
+		remain_priv =
+			priv->phandle->priv[priv->phandle->remain_bss_index];
+		if (remain_priv) {
+			PRINTM(MMSG,
+			       "Cancel Remain on Channel before scan request\n");
+			if (woal_cfg80211_remain_on_channel_cfg(
+				    remain_priv, MOAL_IOCTL_WAIT, MTRUE,
+				    &channel_status, NULL, 0, 0))
+				PRINTM(MERROR,
+				       "Fail to cancel remain on channel %s %d\n",
+				       __func__, __LINE__);
+			if (priv->phandle->cookie) {
+				cfg80211_remain_on_channel_expired(
+#if CFG80211_VERSION_CODE < KERNEL_VERSION(3, 6, 0)
+					remain_priv->netdev,
+#else
+					remain_priv->wdev,
+#endif
+					priv->phandle->cookie,
+					&priv->phandle->chan,
+#if CFG80211_VERSION_CODE < KERNEL_VERSION(3, 8, 0)
+					priv->phandle->channel_type,
+#endif
+					GFP_ATOMIC);
+				priv->phandle->cookie = 0;
+			}
+			priv->phandle->remain_on_channel = MFALSE;
+		}
 	}
-
-	switch (chan->band) {
-	case IEEE80211_BAND_5GHZ:
-		band_mask = SCAN_SETBAND_5G;
-		break;
-	case IEEE80211_BAND_2GHZ:
-		band_mask = SCAN_SETBAND_2G;
-		break;
-	default:
-		break;
-	}
-
-	if (band_mask & priv->scan_setband_mask) {
-		ret = MTRUE;
-	} else {
-		PRINTM(MINFO, "is_scan_band_allowed: Avoid scan on band %d\n",
-		       chan->band);
-		ret = MFALSE;
-	}
-
-	LEAVE();
-	return ret;
+#endif
 }
 
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 6, 0)
@@ -4495,6 +4597,10 @@ static int woal_cfg80211_scan(struct wiphy *wiphy, struct net_device *dev,
 				   msecs_to_jiffies(1000));
 		return ret;
 	}
+
+	/** Cance remain on channel */
+	woal_cancel_remain_on_channel(priv);
+
 	memset(&bss_info, 0, sizeof(bss_info));
 	if (MLAN_STATUS_SUCCESS ==
 	    woal_get_bss_info(priv, MOAL_IOCTL_WAIT, &bss_info)) {
@@ -9921,8 +10027,32 @@ static mlan_status woal_cfg80211_init_wiphy(moal_private *priv,
 	t_u16 enable = 0;
 #endif
 	int mcs_supp = 0;
+	char countryOTP[3];
 
 	ENTER();
+	countryOTP[0] = fw_info->fw_country_code & 0x00FF;
+	countryOTP[1] = (fw_info->fw_country_code & 0xFF00) >> 8;
+	countryOTP[2] = '\0';
+
+	/**check for OTP country code */
+	if (!fw_info->force_reg && countryOTP[0] && countryOTP[1] &&
+	    (priv->phandle->params.cntry_txpwr == CNTRY_RGPOWER_MODE)) {
+		priv->phandle->country_code[0] = countryOTP[0];
+		priv->phandle->country_code[1] = countryOTP[1];
+
+		/**download OTP country code rgpower_xx.bin file*/
+		if (MLAN_STATUS_SUCCESS !=
+		    woal_request_country_power_table(priv, countryOTP,
+						     MOAL_IOCTL_WAIT)) {
+			PRINTM(MCMND, "rgpower_xx downloading fail \n");
+#if CFG80211_VERSION_CODE < KERNEL_VERSION(3, 9, 0)
+			return -EFAULT;
+#else
+			return MLAN_STATUS_FAILURE;
+#endif
+		}
+		woal_get_chan_region_cfg(priv);
+	}
 	/* Get 11n tx parameters from MLAN */
 	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_11n_cfg));
 	if (req == NULL) {

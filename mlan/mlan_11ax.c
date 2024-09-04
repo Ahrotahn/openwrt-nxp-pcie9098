@@ -874,6 +874,8 @@ mlan_status wlan_11ax_ioctl_cmd(pmlan_adapter pmadapter,
 	mlan_ds_11ax_cmd_cfg *cfg = MNULL;
 	mlan_private *pmpriv = pmadapter->priv[pioctl_req->bss_index];
 	t_u16 cmd_action = 0;
+	mlan_ds_11ax_llde_pkt_filter_cmd *llde_pkt_filter = MNULL;
+	int mlan_ds_11ax_cmd_cfg_header = 0;
 
 	ENTER();
 
@@ -892,6 +894,36 @@ mlan_status wlan_11ax_ioctl_cmd(pmlan_adapter pmadapter,
 	else
 		cmd_action = HostCmd_ACT_GEN_GET;
 
+	/* update pmadapter structure with llde packet filter parameters */
+	if ((cfg->sub_id == MLAN_11AXCMD_LLDE_SUBID) &&
+	    (pioctl_req->action == MLAN_ACT_SET)) {
+		mlan_ds_11ax_cmd_cfg_header = sizeof(t_u32 /*sub_command*/) +
+					      sizeof(t_u32 /*sub_id*/);
+		llde_pkt_filter =
+			(mlan_ds_11ax_llde_pkt_filter_cmd
+				 *)((t_u8 *)cfg + mlan_ds_11ax_cmd_cfg_header +
+				    sizeof(mlan_ds_11ax_llde_cmd));
+
+		pmadapter->llde_packet_type = llde_pkt_filter->packet_type;
+		pmadapter->llde_device_filter = llde_pkt_filter->device_filter;
+
+		memcpy_ext(pmadapter, pmadapter->llde_macfilter1,
+			   &llde_pkt_filter->macfilter1, MLAN_MAC_ADDR_LENGTH,
+			   MLAN_MAC_ADDR_LENGTH);
+
+		memcpy_ext(pmadapter, pmadapter->llde_macfilter2,
+			   &llde_pkt_filter->macfilter2, MLAN_MAC_ADDR_LENGTH,
+			   MLAN_MAC_ADDR_LENGTH);
+
+		/* remove llde packet filter parameters from buffer which will
+		 * be passed to fimrware */
+		/* pass mlan_ds_11ax_llde_cmd params only to fw */
+		// coverity[bad_memset: SUPPRESS]
+		memset(pmadapter,
+		       (t_u8 *)cfg + mlan_ds_11ax_cmd_cfg_header +
+			       sizeof(mlan_ds_11ax_llde_cmd),
+		       0, sizeof(mlan_ds_11ax_llde_pkt_filter_cmd));
+	}
 	/* Send request to firmware */
 	status = wlan_prepare_cmd(pmpriv, HostCmd_CMD_11AX_CMD, cmd_action, 0,
 				  (t_void *)pioctl_req, (t_void *)cfg);
@@ -1115,6 +1147,7 @@ mlan_status wlan_cmd_twt_cfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 	hostcmd_twt_teardown *twt_teardown_params = MNULL;
 	hostcmd_twt_report *twt_report_params = MNULL;
 	hostcmd_twt_information *twt_information_params = MNULL;
+	hostcmd_btwt_ap_config *btwt_ap_config_params = MNULL;
 	mlan_status ret = MLAN_STATUS_SUCCESS;
 
 	ENTER();
@@ -1184,6 +1217,76 @@ mlan_status wlan_cmd_twt_cfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		twt_information_params->suspend_duration = wlan_cpu_to_le32(
 			ds_twtcfg->param.twt_information.suspend_duration);
 		cmd->size += sizeof(hostcmd_twtcfg->param.twt_information);
+		break;
+	case MLAN_11AX_BTWT_AP_CONFIG_SUBID:
+		btwt_ap_config_params = &hostcmd_twtcfg->param.btwt_ap_config;
+		// coverity[bad_memset: SUPPRESS]
+		memset(pmadapter, btwt_ap_config_params, 0x00,
+		       sizeof(hostcmd_twtcfg->param.btwt_ap_config));
+		btwt_ap_config_params->ap_bcast_bet_sta_wait =
+			ds_twtcfg->param.btwt_ap_config.ap_bcast_bet_sta_wait;
+		btwt_ap_config_params->Ap_Bcast_Offset = wlan_cpu_to_le16(
+			ds_twtcfg->param.btwt_ap_config.Ap_Bcast_Offset);
+		btwt_ap_config_params->bcastTWTLI =
+			ds_twtcfg->param.btwt_ap_config.bcastTWTLI;
+		btwt_ap_config_params->count =
+			ds_twtcfg->param.btwt_ap_config.count;
+		btwt_ap_config_params->BTWT_sets[0].btwtId =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[0].btwtId;
+		btwt_ap_config_params->BTWT_sets[0].Ap_Bcast_Mantissa =
+			wlan_cpu_to_le16(
+				ds_twtcfg->param.btwt_ap_config.BTWT_sets[0]
+					.Ap_Bcast_Mantissa);
+		btwt_ap_config_params->BTWT_sets[0].Ap_Bcast_Exponent =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[0]
+				.Ap_Bcast_Exponent;
+		btwt_ap_config_params->BTWT_sets[0].nominalwake =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[0].nominalwake;
+		btwt_ap_config_params->BTWT_sets[1].btwtId =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[1].btwtId;
+		btwt_ap_config_params->BTWT_sets[1].Ap_Bcast_Mantissa =
+			wlan_cpu_to_le16(
+				ds_twtcfg->param.btwt_ap_config.BTWT_sets[1]
+					.Ap_Bcast_Mantissa);
+		btwt_ap_config_params->BTWT_sets[1].Ap_Bcast_Exponent =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[1]
+				.Ap_Bcast_Exponent;
+		btwt_ap_config_params->BTWT_sets[1].nominalwake =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[1].nominalwake;
+		btwt_ap_config_params->BTWT_sets[2].btwtId =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[2].btwtId;
+		btwt_ap_config_params->BTWT_sets[2].Ap_Bcast_Mantissa =
+			wlan_cpu_to_le16(
+				ds_twtcfg->param.btwt_ap_config.BTWT_sets[2]
+					.Ap_Bcast_Mantissa);
+		btwt_ap_config_params->BTWT_sets[2].Ap_Bcast_Exponent =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[2]
+				.Ap_Bcast_Exponent;
+		btwt_ap_config_params->BTWT_sets[2].nominalwake =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[2].nominalwake;
+		btwt_ap_config_params->BTWT_sets[3].btwtId =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[3].btwtId;
+		btwt_ap_config_params->BTWT_sets[3].Ap_Bcast_Mantissa =
+			wlan_cpu_to_le16(
+				ds_twtcfg->param.btwt_ap_config.BTWT_sets[3]
+					.Ap_Bcast_Mantissa);
+		btwt_ap_config_params->BTWT_sets[3].Ap_Bcast_Exponent =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[3]
+				.Ap_Bcast_Exponent;
+		btwt_ap_config_params->BTWT_sets[3].nominalwake =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[3].nominalwake;
+		btwt_ap_config_params->BTWT_sets[4].btwtId =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[4].btwtId;
+		btwt_ap_config_params->BTWT_sets[4].Ap_Bcast_Mantissa =
+			wlan_cpu_to_le16(
+				ds_twtcfg->param.btwt_ap_config.BTWT_sets[4]
+					.Ap_Bcast_Mantissa);
+		btwt_ap_config_params->BTWT_sets[4].Ap_Bcast_Exponent =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[4]
+				.Ap_Bcast_Exponent;
+		btwt_ap_config_params->BTWT_sets[4].nominalwake =
+			ds_twtcfg->param.btwt_ap_config.BTWT_sets[4].nominalwake;
+		cmd->size += sizeof(hostcmd_twtcfg->param.btwt_ap_config);
 		break;
 	default:
 		PRINTM(MERROR, "Unknown subcmd %x\n", ds_twtcfg->sub_id);

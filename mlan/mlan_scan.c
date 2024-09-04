@@ -6543,6 +6543,12 @@ mlan_status wlan_cmd_bgscan_config(mlan_private *pmpriv,
 				       .chan_scan_mode.passive_scan,
 			       scan_dur);
 
+			if (tlv_chan_list->chan_scan_param[chan_num]
+				    .chan_scan_mode.passive_scan)
+				tlv_chan_list->chan_scan_param[chan_num]
+					.chan_scan_mode.passive_to_active_scan =
+					MTRUE;
+
 			tlv_chan_list->chan_scan_param[chan_num].min_scan_time =
 				wlan_cpu_to_le16(scan_dur);
 			tlv_chan_list->chan_scan_param[chan_num].max_scan_time =

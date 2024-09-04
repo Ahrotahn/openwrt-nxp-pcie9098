@@ -1210,6 +1210,11 @@ process_start:
 			pmadapter->pcie_cmd_dnld_int = MFALSE;
 			mlan_process_pcie_interrupt_cb(pmadapter, RX_CMD_DNLD);
 		}
+		if (IS_PCIE(pmadapter->card_type) &&
+		    pmadapter->pcie_event_int) {
+			pmadapter->pcie_event_int = MFALSE;
+			mlan_process_pcie_interrupt_cb(pmadapter, RX_EVENT);
+		}
 #endif
 
 		/* wake up timeout happened */
@@ -1431,6 +1436,71 @@ exit_main_proc:
 }
 
 /**
+ *  @brief Function to check if llde pkt type matches to defined pkt filter and
+ * mark those pkts
+ *
+ *  @param padapter	A pointer to mlan_adapter structure
+ *  @param pmbuf		A pointer to mlan_buffer structure
+ *
+ *  @return			void
+ */
+static void mlan_check_llde_pkt_filter(mlan_adapter *pmadapter,
+				       pmlan_buffer pmbuf, t_u8 ip_protocol)
+{
+	mlan_private *pmpriv = pmadapter->priv[pmbuf->bss_index];
+	t_u8 matched_filter = 0;
+
+	if (!(pmadapter->llde_enabled &&
+	      (pmadapter->llde_mode == MLAN_11AXCMD_LLDE_MODE_EVENT_DRIVEN))) {
+		return;
+	}
+	/* match iphone mac addr */
+	if (pmadapter->llde_device_filter == 1) {
+		sta_node *sta_ptr = MNULL;
+		// get station entry from Peer MAC address
+		sta_ptr = wlan_get_station_entry(
+			pmpriv, (pmbuf->pbuf + pmbuf->data_offset));
+		if (sta_ptr && sta_ptr->is_apple_sta) {
+			matched_filter = 1;
+		}
+	}
+	if (matched_filter == 0) {
+		/* check mac filter if iphone device filter not matched */
+		if ((memcmp(pmadapter, pmadapter->llde_macfilter1,
+			    (pmbuf->pbuf + pmbuf->data_offset),
+			    MLAN_MAC_ADDR_LENGTH) == 0) ||
+		    (memcmp(pmadapter, pmadapter->llde_macfilter2,
+			    (pmbuf->pbuf + pmbuf->data_offset),
+			    MLAN_MAC_ADDR_LENGTH) == 0)) {
+			matched_filter = 1;
+		}
+	}
+
+	if (matched_filter) {
+		if ((pmadapter->llde_packet_type == LLDE_FILTER_PKT_ALL) ||
+		    ((pmadapter->llde_packet_type == LLDE_FILTER_PKT_UDP) &&
+		     (ip_protocol == MLAN_IP_PROTOCOL_UDP))) {
+			pmbuf->flags |= MLAN_BUF_FLAG_LLDE_PKT_FILTER;
+		} else if (((pmadapter->llde_packet_type ==
+			     LLDE_FILTER_PKT_TCP_ACK) ||
+			    (pmadapter->llde_packet_type ==
+			     LLDE_FILTER_PKT_TCP_DATA)) &&
+			   (ip_protocol == MLAN_IP_PROTOCOL_TCP)) {
+			/*TODO: identify TCP ACK and Data packets and set the
+			 * MLAN_BUF_FLAG_LLDE_PKT_FILTER flag accordingly */
+			pmbuf->flags |= MLAN_BUF_FLAG_LLDE_PKT_FILTER;
+
+		} else if ((pmadapter->llde_packet_type ==
+			    LLDE_FILTER_PKT_ICMP_PING) &&
+			   (ip_protocol == MLAN_IP_PROTOCOL_ICMP)) {
+			pmbuf->flags |= MLAN_BUF_FLAG_LLDE_PKT_FILTER;
+		}
+	}
+
+	return;
+}
+
+/**
  *  @brief Function to send packet
  *
  *  @param padapter	A pointer to mlan_adapter structure
@@ -1487,6 +1557,9 @@ mlan_status mlan_send_packet(t_void *padapter, pmlan_buffer pmbuf)
 					pmbuf->priority =
 						WMM_SECOND_HIGHEST_PRIORITY;
 			}
+
+			mlan_check_llde_pkt_filter(pmadapter, pmbuf,
+						   ip_protocol);
 		}
 	}
 #endif
@@ -1738,11 +1811,11 @@ mlan_status mlan_recv(t_void *padapter, pmlan_buffer pmbuf, t_u32 port)
 			if ((len > 0) && (len < MAX_EVENT_SIZE))
 				memmove(pmadapter, pmadapter->event_body, pbuf,
 					len);
-			pmadapter->event_received = MTRUE;
-			pmadapter->pmlan_buffer_event = pmbuf;
 			/* remove 4 byte recv_type */
 			pmbuf->data_offset += MLAN_TYPE_LEN;
 			pmbuf->data_len -= MLAN_TYPE_LEN;
+			pmadapter->event_received = MTRUE;
+			pmadapter->pmlan_buffer_event = pmbuf;
 			/* MOAL to call mlan_main_process for processing */
 			break;
 		default:
@@ -2045,12 +2118,12 @@ void mlan_process_pcie_interrupt_cb(t_void *padapter, int type)
 					MNULL);
 		}
 		break;
-	case RX_EVENT: // Rx event
 	case RX_CMD_RESP: // Rx CMD Resp
 		if (mlan_main_process(pmadapter) == MLAN_STATUS_FAILURE)
 			PRINTM(MERROR, "mlan_main_process failed.\n");
 		break;
 	case RX_CMD_DNLD:
+	case RX_EVENT:
 	default:
 		break;
 	}

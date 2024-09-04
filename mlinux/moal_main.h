@@ -124,6 +124,10 @@ Change log:
 #include <net/netdev_rx_queue.h>
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 9, 0)
+#include <net/rps.h>
+#endif
+
 #include "mlan.h"
 #include "moal_shim.h"
 /* Wireless header */
@@ -1160,7 +1164,11 @@ struct debug_data_priv {
 /** IP address operation: Remove */
 #define IPADDR_OP_REMOVE 0
 
+/* max hold of tcp ack pkt*/
 #define TCP_ACK_MAX_HOLD 9
+/* max num of tcp session */
+#define TCP_ACK_MAX_SESS 100
+
 #define DROP_TCP_ACK 1
 #define HOLD_TCP_ACK 2
 struct tcp_sess {
@@ -1194,6 +1202,8 @@ struct tx_status_info {
 	t_u8 tx_seq_num;
 	/** cancel remain on channel when receive tx status */
 	t_u8 cancel_remain_on_channel;
+	/** set to notify userspace tx duration expired */
+	bool send_tx_expired;
 	/**          skb */
 	void *tx_skb;
 };
@@ -1896,6 +1906,8 @@ struct _moal_private {
 
 	/** tcp session queue */
 	struct list_head tcp_sess_queue;
+	/** tcp session count */
+	t_u8 tcp_sess_cnt;
 	/** TCP Ack enhance flag */
 	t_u8 enable_tcp_ack_enh;
 	/** TCP Ack drop count */
@@ -2879,10 +2891,6 @@ struct _moal_handle {
 	struct work_struct rx_work;
 #endif
 #ifdef PCIE
-	/** Driver pcie rx event workqueue */
-	struct workqueue_struct *pcie_rx_event_workqueue;
-	/** pcie rx event  work */
-	struct work_struct pcie_rx_event_work;
 	/** Driver pcie rx cmd resp workqueue */
 	struct workqueue_struct *pcie_cmd_resp_workqueue;
 	/** pcie rx cmd resp work */
@@ -2947,15 +2955,6 @@ struct _moal_handle {
 #endif
 	/** cookie */
 	t_u64 cookie;
-#endif
-
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-	/** Tx frame wait cancel timer set flag */
-	BOOLEAN is_nan_timer_set;
-	/** Tx frame wait timer for nan publish */
-	moal_drv_timer nan_timer __ATTRIB_ALIGN__;
-	/** NAN cookie */
-	t_u64 nan_cookie;
 #endif
 
 #ifdef WIFI_DIRECT_SUPPORT
@@ -4157,9 +4156,6 @@ int woal_hostcmd_ioctl(struct net_device *dev, struct ifreq *req);
 mlan_status woal_set_remain_channel_ioctl(moal_private *priv, t_u8 wait_option,
 					  pmlan_ds_remain_chan pchan);
 void woal_remain_timer_func(void *context);
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-void woal_nan_timer_func(void *context);
-#endif
 #ifdef WIFI_DIRECT_SUPPORT
 mlan_status woal_wifi_direct_mode_cfg(moal_private *priv, t_u16 action,
 				      t_u16 *mode);
@@ -4220,7 +4216,6 @@ t_void woal_evt_work_queue(struct work_struct *work);
 t_void woal_mclist_work_queue(struct work_struct *work);
 
 #ifdef PCIE
-t_void woal_pcie_rx_event_work_queue(struct work_struct *work);
 t_void woal_pcie_cmd_resp_work_queue(struct work_struct *work);
 t_void woal_pcie_delayed_tx_work(struct work_struct *work);
 #ifndef TASKLET_SUPPORT

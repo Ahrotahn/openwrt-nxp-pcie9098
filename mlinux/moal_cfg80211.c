@@ -2666,7 +2666,7 @@ static t_u8 woal_check_mgmt_tx_channel(moal_private *priv,
  */
 static int woal_mgmt_tx(moal_private *priv, const u8 *buf, size_t len,
 			struct ieee80211_channel *chan, u64 cookie,
-			unsigned int wait)
+			unsigned int wait, bool send_tx_expired)
 {
 	int ret = 0;
 	pmlan_buffer pmbuf = NULL;
@@ -2687,6 +2687,11 @@ static int woal_mgmt_tx(moal_private *priv, const u8 *buf, size_t len,
 	mlan_ds_misc_cfg *misc = NULL;
 
 	ENTER();
+
+	if (len < IEEE80211_HEADER_SIZE) {
+		PRINTM(MERROR, "Invalid tx mgmt info buffer length\n");
+		goto done;
+	}
 
 	/* pkt_type + tx_control */
 #define HEADER_SIZE 8
@@ -2773,6 +2778,7 @@ static int woal_mgmt_tx(moal_private *priv, const u8 *buf, size_t len,
 				tx_info->tx_cookie = cookie;
 				tx_info->tx_skb = skb;
 				tx_info->tx_seq_num = tx_seq_num;
+				tx_info->send_tx_expired = send_tx_expired;
 				if ((priv->bss_role == MLAN_BSS_ROLE_UAP) &&
 				    (priv->phandle->remain_on_channel && !wait))
 					tx_info->cancel_remain_on_channel =
@@ -2897,7 +2903,7 @@ done:
  *
  * @return	true -- success, otherwise false
  */
-static BOOLEAN is_nan_publish(const t_u8 *buf)
+static BOOLEAN is_nan_action_frame(const t_u8 *buf)
 {
 	t_u8 nan_sdf_oui[4] = {0x50, 0x6f, 0x9a, 0x13};
 	t_u8 nan_attr_id, nan_srv_ctrl_type;
@@ -2906,9 +2912,13 @@ static BOOLEAN is_nan_publish(const t_u8 *buf)
 		nan_attr_id = *(buf + NAN_SDA_OFFSET);
 		nan_srv_ctrl_type =
 			*(buf + NAN_SDA_OFFSET + NAN_SRVC_CTRL_OFFSET);
+		PRINTM(MINFO, "NAN: attribute%x service ctrl type%x\n",
+		       nan_attr_id, nan_srv_ctrl_type);
 		if (nan_attr_id == NAN_ATTR_SDA &&
-		    (nan_srv_ctrl_type & NAN_SRV_CTRL_TYPE_MASK) ==
-			    NAN_PUBLISH) {
+		    ((nan_srv_ctrl_type & NAN_SRV_CTRL_TYPE_MASK) ==
+			     NAN_PUBLISH ||
+		     (nan_srv_ctrl_type & NAN_SRV_CTRL_TYPE_MASK) ==
+			     NAN_FOLLOW_UP)) {
 			return MTRUE;
 		}
 	}
@@ -3072,6 +3082,8 @@ int woal_cfg80211_mgmt_tx(struct wiphy *wiphy,
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
 	t_u8 category, action;
 #endif
+	bool send_tx_expired = false;
+
 	ENTER();
 
 	if (buf == NULL || len == 0) {
@@ -3259,25 +3271,25 @@ int woal_cfg80211_mgmt_tx(struct wiphy *wiphy,
 #endif
 
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 3, 0)
-	if (ieee80211_is_action(
+	if (len > sizeof(moal_802_11_action_header) &&
+	    ieee80211_is_action(
 		    ((struct ieee80211_mgmt *)buf)->frame_control)) {
 		category = *(buf + sizeof(moal_802_11_action_header) - 1);
 		action = *(buf + sizeof(moal_802_11_action_header));
 		if (category == IEEE_MGMT_ACTION_CATEGORY_PUBLIC &&
 		    action == IEEE_PUBLIC_ACTION_CATEGORY_VENDOR_SPECIFIC &&
-		    is_nan_publish(buf + sizeof(moal_802_11_action_header))) {
-			priv->phandle->nan_cookie = *cookie;
-			if (priv->phandle->is_nan_timer_set) {
-				woal_cancel_timer(&priv->phandle->nan_timer);
-				priv->phandle->is_nan_timer_set = MFALSE;
-			}
-			priv->phandle->is_nan_timer_set = MTRUE;
-			woal_mod_timer(&priv->phandle->nan_timer, wait);
+		    is_nan_action_frame(buf +
+					sizeof(moal_802_11_action_header))) {
+			PRINTM(MINFO,
+			       "NAN: set tx duration expired for cookie=%llx\n",
+			       *cookie);
+			send_tx_expired = true;
 		}
 	}
 #endif
 
-	ret = woal_mgmt_tx(priv, buf, len, chan, *cookie, wait);
+	ret = woal_mgmt_tx(priv, buf, len, chan, *cookie, wait,
+			   send_tx_expired);
 
 done:
 	LEAVE();
@@ -5223,11 +5235,12 @@ void woal_cfg80211_notify_channel(moal_private *priv,
 #elif KERNEL_VERSION(3, 14, 0) <= CFG80211_VERSION_CODE
 		mutex_lock(&priv->wdev->mtx);
 #endif
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 8, 0)
-		cfg80211_ch_switch_notify(priv->netdev, &chandef, 0);
-#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 3, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 3, 0) &&                        \
+	CFG80211_VERSION_CODE < KERNEL_VERSION(6, 9, 0)
 		cfg80211_ch_switch_notify(priv->netdev, &chandef, 0, 0);
-#elif ((CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) && IMX_ANDROID_13))
+#elif ((CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 1, 0) &&                    \
+	IMX_ANDROID_13)) &&                                                    \
+	CFG80211_VERSION_CODE < KERNEL_VERSION(6, 9, 0)
 		cfg80211_ch_switch_notify(priv->netdev, &chandef, 0, 0);
 #elif ((CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 19, 2)) ||                  \
        IMX_ANDROID_13 || IMX_ANDROID_12_BACKPORT)

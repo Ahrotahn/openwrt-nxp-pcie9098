@@ -2868,7 +2868,7 @@ module_param(ring_size, int, 0);
 MODULE_PARM_DESC(ring_size,
 		 "adma dma ring size: 32/64/128/256/512, default 128");
 module_param(pcie_int_mode, int, 0);
-MODULE_PARM_DESC(pcie_int_mode, "0: Legacy mode; 1: MSI mode; 2: MSI-X mode");
+MODULE_PARM_DESC(pcie_int_mode, "0: Legacy mode; 1: MSI mode");
 #endif /* PCIE */
 module_param(low_power_mode_enable, int, 0);
 MODULE_PARM_DESC(low_power_mode_enable, "0/1: Disable/Enable Low Power Mode");

@@ -11,7 +11,7 @@
 	Goto source code directory.
 	make [clean] build
 	The driver and utility binaries can be found in bin_wlan directory.
-	The driver code supports Linux kernel from 2.6.32 to 6.8.4.
+	The driver code supports Linux kernel from 2.6.32 to 6.9.0.
 
 2) FOR DRIVER INSTALL
 
@@ -55,12 +55,21 @@
 	There are some other parameters for debugging purpose etc. Use modinfo to check details.
 	  drvdbg=<bit mask of driver debug message control>
 	  dev_cap_mask=<Bit mask of the device capability>
+	  This load parameter is uses to configure device features support
+	  Usage:
+	      dev_cap_mask=<value to be configured>
+	      <BIT0-BIT15> : Represents features supported
+	      <BIT16>: Indicates support for 11AX
+	      <BIT17>: Indicates support for 6G
+          Example:
+	      To disable 11AX and 6G support: dev_cap_mask=0xfffcffff
 	  mac_addr=xx:xx:xx:xx:xx:xx <override the MAC address (in hex)>
 	  auto_ds=0|1|2 <use MLAN default | enable auto deepsleep | disable auto deepsleep>
 	  ext_scan=0|1|2 <use MLAN default | Enable Extended Scan| Enable Enhanced Extended Scan>
       net_rx=0|1 <use netif_rx_ni in rx | use netif_receive_skb in rx>
       amsdu_deaggr=0|1 <buf copy in amsud deaggregation | avoid buf copy in amsud deaggregation (default)>
 
+	  bootup_cal_ctrl=0|1 <disable boot time config default | enable boot time config>
 	  ps_mode=0|1|2 <use MLAN default | enable IEEE PS mode | disable IEEE PS mode>
 	  sched_scan=0|1 <disable sched_scan | enable sched_scan default>
 	  max_tx_buf=2048|4096|8192 <maximum AMSDU Tx buffer size>
@@ -115,7 +124,6 @@
 		as module parameters. If wq_sched_policy is (0, 3 or 5), then wq_sched_prio
 		must be 0. wq_sched_prio should be 1 to 99 otherwise.
 	  rx_work=0|1|2 <default | Enable rx_work_queue | Disable rx_work_queue>
-	  pcie_int_mode=0|1|2 <Legacy mode, MSI mode (default), MSI-X mode>
 	  pcie_int_mode=0|1 <Legacy mode, MSI mode (default)>
       ring_size=32|64|128|256|512 <adma ring size for 9097/9098>
 	  aggrctrl=1|0 <enable Tx aggr | disable Tx aggr>

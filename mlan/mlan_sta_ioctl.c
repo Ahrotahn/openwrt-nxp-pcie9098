@@ -417,6 +417,9 @@ static mlan_status wlan_get_info_ioctl(pmlan_adapter pmadapter,
 			pget_info->param.fw_info.force_reg = MTRUE;
 		else
 			pget_info->param.fw_info.force_reg = MFALSE;
+		/**country code from OTP */
+		pget_info->param.fw_info.fw_country_code =
+			pmadapter->fw_country_code;
 		pget_info->param.fw_info.ecsa_enable = pmadapter->ecsa_enable;
 		pget_info->param.fw_info.getlog_enable =
 			pmadapter->getlog_enable;

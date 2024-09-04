@@ -1980,6 +1980,8 @@ typedef struct _mlan_fw_info {
 	/* FW support tx data by cmd */
 	t_u8 cmd_tx_data;
 	t_u8 sec_rgpower;
+	/*country code from OTP*/
+	t_u16 fw_country_code;
 } mlan_fw_info, *pmlan_fw_info;
 
 /** Version string buffer length */
@@ -2406,6 +2408,14 @@ typedef struct _mlan_debug_info {
 	t_u32 mlan_rx_processing;
 	/** rx pkts queued */
 	t_u32 rx_pkts_queued;
+#ifdef PCIE
+	/** process pcie event interrupt */
+	t_u8 pcie_event_processing;
+	/** process pcie tx interrupt */
+	t_u8 pcie_tx_processing;
+	/** process pcie rx interrupt */
+	t_u8 pcie_rx_processing;
+#endif
 	/** Number of host to card command failures */
 	t_u32 num_cmd_host_to_card_failure;
 	/** Number of host to card sleep confirm failures */
@@ -4056,6 +4066,8 @@ typedef struct _mlan_ds_11ax_cfg {
 #define MLAN_11AX_TWT_TEARDOWN_SUBID 0x115
 #define MLAN_11AX_TWT_REPORT_SUBID 0x116
 #define MLAN_11AX_TWT_INFORMATION_SUBID 0x119
+#define MLAN_11AX_BTWT_AP_CONFIG_SUBID 0x120
+#define BTWT_AGREEMENT_MAX 5
 
 #define MRVL_DOT11AX_ENABLE_SR_TLV_ID (PROPRIETARY_TLV_BASE_ID + 322)
 #define MRVL_DOT11AX_OBSS_PD_OFFSET_TLV_ID (PROPRIETARY_TLV_BASE_ID + 323)
@@ -4199,6 +4211,30 @@ typedef struct _mlan_ds_11ax_cmd_cfg {
 	} param;
 } mlan_ds_11ax_cmd_cfg, *pmlan_ds_11ax_cmd_cfg;
 
+/** Type definition of mlan_ds_11ax_llde_pkt_filter_cmd for
+ * mlan_ds_11ax_llde_pkt_filter_cmd_cfg */
+typedef struct _mlan_ds_11ax_llde_pkt_filter_cmd {
+	/** 0: no preference, 1: iphone (carplay IE in assoc)*/
+	t_u8 device_filter;
+	/** make traffic to specific mac address to be high priority, Can have
+	 * max 2 mac address entries */
+	t_u8 macfilter1[MLAN_MAC_ADDR_LENGTH];
+	/** make traffic to specific mac address to be high priority, other mac
+	 * filter */
+	t_u8 macfilter2[MLAN_MAC_ADDR_LENGTH];
+	/** high priority data packet type. 0: All traffic, 1: ping, 2: TCP ACK,
+	 * 4: TCP Data, 8: UDP */
+	t_u8 packet_type;
+} mlan_ds_11ax_llde_pkt_filter_cmd, *pmlan_ds_11ax_llde_pkt_filter_cmd;
+
+/** Type definition of BTWT_set*/
+typedef struct MLAN_PACK_START {
+	t_u8 btwtId;
+	t_u16 Ap_Bcast_Mantissa;
+	t_u8 Ap_Bcast_Exponent;
+	t_u8 nominalwake;
+} MLAN_PACK_END BTWT_set;
+
 /** Type definition of mlan_ds_twt_setup for MLAN_OID_11AX_TWT_CFG */
 typedef struct MLAN_PACK_START _mlan_ds_twt_setup {
 	/** Implicit, 0: TWT session is explicit, 1: Session is implicit */
@@ -4264,6 +4300,17 @@ typedef struct MLAN_PACK_START _mlan_ds_twt_information {
 	t_u32 suspend_duration;
 } MLAN_PACK_END mlan_ds_twt_information, *pmlan_ds_twt_information;
 
+/** Type definition of mlan_ds_btwt_ap_config for MLAN_OID_11AX_TWT_CFG */
+typedef struct MLAN_PACK_START _mlan_ds_btwt_ap_config {
+	/** TWT Flow Identifier. Range: [0-7] */
+	t_u8 ap_bcast_bet_sta_wait;
+	t_u16 Ap_Bcast_Offset;
+	t_u8 bcastTWTLI;
+	t_u8 count;
+	BTWT_set BTWT_sets[BTWT_AGREEMENT_MAX];
+
+} MLAN_PACK_END mlan_ds_btwt_ap_config, *pmlan_ds_btwt_ap_config;
+
 /** Type definition of mlan_ds_twtcfg for MLAN_OID_11AX_TWT_CFG */
 typedef struct MLAN_PACK_START _mlan_ds_twtcfg {
 	/** Sub-command */
@@ -4283,6 +4330,10 @@ typedef struct MLAN_PACK_START _mlan_ds_twtcfg {
 		 * MLAN_11AX_TWT_INFORMATION_SUBID
 		 */
 		mlan_ds_twt_information twt_information;
+		/** BTWT AP config for Sub ID:
+		 * MLAN_11AX_BTWT_AP_CONFIG_SUBID_SUBID
+		 */
+		mlan_ds_btwt_ap_config btwt_ap_config;
 	} param;
 } MLAN_PACK_END mlan_ds_twtcfg, *pmlan_ds_twtcfg;
 
@@ -5783,6 +5834,15 @@ typedef MLAN_PACK_START struct _mlan_ds_csi_params {
 	t_u8 csi_filter_cnt;
 	/** Chip ID */
 	t_u8 chip_id;
+	/** band config */
+	t_u8 band_config;
+	/** Channel num */
+	t_u8 channel;
+	/** Enable getting CSI data on special channel */
+	t_u8 csi_monitor_enable;
+	/** CSI data received in cfg channel with mac addr filter, not only RA
+	 * is us or other*/
+	t_u8 ra4us;
 	/** CSI filters */
 	mlan_csi_filter_t csi_filter[CSI_FILTER_MAX];
 } MLAN_PACK_END mlan_ds_csi_params;

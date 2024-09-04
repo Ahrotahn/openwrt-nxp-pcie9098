@@ -440,25 +440,6 @@ static mlan_status woal_do_flr(moal_handle *handle, bool prepare, bool flr_flag)
 		}
 		handle->pmlan_adapter = NULL;
 	}
-#ifdef DUMP_TO_PROC
-	if (handle->fw_dump_buf) {
-		moal_vfree(handle, handle->fw_dump_buf);
-		handle->fw_dump_buf = NULL;
-		handle->fw_dump_len = 0;
-	}
-#endif
-#ifdef PCIEAW693
-	if (IS_PCIEAW693(handle->card_type))
-		handle->event_fw_dump = MTRUE;
-#endif
-#ifdef PCIEIW624
-	if (IS_PCIEIW624(handle->card_type))
-		handle->event_fw_dump = MTRUE;
-#endif
-#ifdef PCIE9098
-	if (IS_PCIE9098(handle->card_type))
-		handle->event_fw_dump = MTRUE;
-#endif
 	handle->fw_dump = MFALSE;
 
 	goto exit;
@@ -697,6 +678,11 @@ static void woal_pcie_shutdown(struct pci_dev *dev)
 		return;
 	}
 	handle = card->handle;
+	if (!handle) {
+		PRINTM(MINFO, "Invalid handle\n");
+		LEAVE();
+		return;
+	}
 	if (handle->second_mac)
 		goto done;
 #if defined(PCIE9098) || defined(PCIE9097) || defined(PCIEAW693) ||            \
@@ -809,12 +795,14 @@ static int woal_pcie_suspend(struct pci_dev *pdev, pm_message_t state)
 		netif_device_detach(handle->priv[i]->netdev);
 
 	if (keep_power) {
+		woal_sched_timeout(200);
 		/* Enable Host Sleep */
 		hs_actived = woal_enable_hs(
 			woal_get_priv(handle, MLAN_BSS_ROLE_ANY));
 		if (hs_actived == MTRUE) {
 			/* Indicate device suspended */
 			handle->is_suspended = MTRUE;
+			woal_sched_timeout(10);
 		} else {
 			PRINTM(MMSG, "HS not actived, suspend fail!");
 			handle->suspend_fail = MTRUE;
@@ -1273,12 +1261,11 @@ static irqreturn_t woal_pcie_interrupt(int irq, void *dev_id)
 		PRINTM(MINTR, "**\n");
 	else
 		PRINTM(MINTR, "*\n");
-
-	ret = mlan_interrupt(0xffff, handle->pmlan_adapter);
 	if (handle->is_suspended) {
-		PRINTM(MINTR, "Receive interrupt in hs_suspended\n");
-		goto exit;
+		PRINTM(MERROR, "Receive interrupt in hs_suspended\n");
 	}
+	ret = mlan_interrupt(0xffff, handle->pmlan_adapter);
+
 exit:
 	if (ret == MLAN_STATUS_SUCCESS)
 		return IRQ_HANDLED;
@@ -1286,60 +1273,6 @@ exit:
 		return IRQ_NONE;
 }
 
-/**
- *  @brief This function handles the MSI-X interrupt.
- *
- *  @param irq	    The irq no. of PCIE device
- *  @param dev_id   A pointer to the msix_context structure
- *
- *  @return         IRQ_HANDLED
- */
-static irqreturn_t woal_pcie_msix_interrupt(int irq, void *dev_id)
-{
-	struct pci_dev *pdev;
-	pcie_service_card *card;
-	moal_handle *handle;
-	msix_context *ctx = (msix_context *)dev_id;
-	mlan_status ret = MLAN_STATUS_SUCCESS;
-
-	if (!ctx) {
-		PRINTM(MFATAL, "%s: ctx=%p is NULL\n", __func__, ctx);
-		goto exit;
-	}
-
-	pdev = ctx->dev;
-
-	if (!pdev) {
-		PRINTM(MFATAL, "%s: pdev is NULL\n", (t_u8 *)pdev);
-		goto exit;
-	}
-
-	card = (pcie_service_card *)pci_get_drvdata(pdev);
-	if (!card || !card->handle) {
-		PRINTM(MFATAL, "%s: card=%p handle=%p\n", __func__, card,
-		       card ? card->handle : NULL);
-		goto exit;
-	}
-	handle = card->handle;
-	if (handle->surprise_removed == MTRUE) {
-		ret = MLAN_STATUS_FAILURE;
-		goto exit;
-	}
-	PRINTM(MINFO, "*** IN PCIE IRQ ***\n");
-	handle->main_state = MOAL_RECV_INT;
-	if (handle->second_mac)
-		PRINTM(MINTR, "**\n");
-	else
-		PRINTM(MINTR, "*\n");
-	ret = mlan_interrupt(ctx->msg_id, handle->pmlan_adapter);
-	queue_work(handle->workqueue, &handle->main_work);
-
-exit:
-	if (ret == MLAN_STATUS_SUCCESS)
-		return IRQ_HANDLED;
-	else
-		return IRQ_NONE;
-}
 /**
  *  @brief This function pre-initializes the PCI-E host
  *  memory space, etc.
@@ -1492,8 +1425,6 @@ static mlan_status woal_pcie_register_dev(moal_handle *handle)
 	mlan_status ret = MLAN_STATUS_SUCCESS;
 	pcie_service_card *card = NULL;
 	struct pci_dev *pdev = NULL;
-	unsigned char nvec;
-	unsigned char i, j;
 	ENTER();
 
 	if (!handle || !handle->card) {
@@ -1509,48 +1440,6 @@ static mlan_status woal_pcie_register_dev(moal_handle *handle)
 	card->handle = handle;
 
 	switch (pcie_int_mode) {
-	case PCIE_INT_MODE_MSIX:
-		pcie_int_mode = PCIE_INT_MODE_MSIX;
-		nvec = PCIE_NUM_MSIX_VECTORS;
-
-		for (i = 0; i < nvec; i++) {
-			card->msix_entries[i].entry = i;
-		}
-
-		/* Try to enable msix */
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
-		ret = pci_enable_msix_exact(pdev, card->msix_entries, nvec);
-#else /* LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 31) */
-		ret = pci_enable_msix(pdev, card->msix_entries, nvec);
-#endif
-
-		if (ret == 0) {
-			for (i = 0; i < nvec; i++) {
-				card->msix_contexts[i].dev = pdev;
-				card->msix_contexts[i].msg_id = i;
-				ret = request_irq(card->msix_entries[i].vector,
-						  woal_pcie_msix_interrupt, 0,
-						  "mrvl_pcie_msix",
-						  &(card->msix_contexts[i]));
-
-				if (ret) {
-					PRINTM(MFATAL,
-					       "request_irq failed: ret=%d\n",
-					       ret);
-					for (j = 0; j < i; j++)
-						free_irq(card->msix_entries[j]
-								 .vector,
-							 &(card->msix_contexts
-								   [i]));
-					pci_disable_msix(pdev);
-					break;
-				}
-			}
-			if (i == nvec)
-				break;
-		}
-		// follow through
-
 		/* fall through */
 	case PCIE_INT_MODE_MSI:
 		pcie_int_mode = PCIE_INT_MODE_MSI;
@@ -1639,8 +1528,6 @@ static void woal_pcie_unregister_dev(moal_handle *handle)
 	pcie_service_card *card =
 		handle ? (pcie_service_card *)handle->card : NULL;
 	struct pci_dev *pdev = NULL;
-	unsigned char i;
-	unsigned char nvec;
 	ENTER();
 
 	if (card) {
@@ -1648,20 +1535,6 @@ static void woal_pcie_unregister_dev(moal_handle *handle)
 		PRINTM(MINFO, "%s(): calling free_irq()\n", __func__);
 
 		switch (pcie_int_mode) {
-		case PCIE_INT_MODE_MSIX:
-			nvec = PCIE_NUM_MSIX_VECTORS;
-
-			for (i = 0; i < nvec; i++)
-				synchronize_irq(card->msix_entries[i].vector);
-
-			for (i = 0; i < nvec; i++)
-				free_irq(card->msix_entries[i].vector,
-					 &(card->msix_contexts[i]));
-
-			pci_disable_msix(pdev);
-
-			break;
-
 		case PCIE_INT_MODE_MSI:
 			free_irq(card->dev->irq, pdev);
 			pci_disable_msi(pdev);
@@ -2689,7 +2562,6 @@ static void woal_pcie_dump_fw_info(moal_handle *phandle)
 	    IS_PCIE9097(phandle->card_type)) {
 		woal_pcie_dump_fw_info_v2(phandle);
 		if (phandle->event_fw_dump) {
-			phandle->event_fw_dump = MFALSE;
 			queue_work(phandle->workqueue, &phandle->main_work);
 			phandle->is_fw_dump_timer_set = MTRUE;
 			woal_mod_timer(&phandle->fw_dump_timer, MOAL_TIMER_5S);

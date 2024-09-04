@@ -106,51 +106,6 @@ static mlan_status wlan_upload_uap_rx_packet(pmlan_adapter pmadapter,
 	return ret;
 }
 
-/**
- *  @brief This function will check if unicast packet need be dropped
- *
- *  @param priv    A pointer to mlan_private
- *  @param mac     mac address to find in station list table
- *
- *  @return	       MLAN_STATUS_FAILURE -- drop packet, otherwise forward to
- * network stack
- */
-static mlan_status wlan_check_unicast_packet(mlan_private *priv, t_u8 *mac)
-{
-	int j;
-	sta_node *sta_ptr = MNULL;
-	pmlan_adapter pmadapter = priv->adapter;
-	pmlan_private pmpriv = MNULL;
-	t_u8 pkt_type = 0;
-	mlan_status ret = MLAN_STATUS_SUCCESS;
-	ENTER();
-	for (j = 0; j < MLAN_MAX_BSS_NUM; ++j) {
-		pmpriv = pmadapter->priv[j];
-		if (pmpriv) {
-			if (GET_BSS_ROLE(pmpriv) == MLAN_BSS_ROLE_STA)
-				continue;
-			sta_ptr = wlan_get_station_entry(pmpriv, mac);
-			if (sta_ptr) {
-				if (pmpriv == priv)
-					pkt_type = PKT_INTRA_UCAST;
-				else
-					pkt_type = PKT_INTER_UCAST;
-				break;
-			}
-		}
-	}
-	if ((pkt_type == PKT_INTRA_UCAST) &&
-	    (priv->pkt_fwd & PKT_FWD_INTRA_UCAST)) {
-		PRINTM(MDATA, "Drop INTRA_UCAST packet\n");
-		ret = MLAN_STATUS_FAILURE;
-	} else if ((pkt_type == PKT_INTER_UCAST) &&
-		   (priv->pkt_fwd & PKT_FWD_INTER_UCAST)) {
-		PRINTM(MDATA, "Drop INTER_UCAST packet\n");
-		ret = MLAN_STATUS_FAILURE;
-	}
-	LEAVE();
-	return ret;
-}
 /********************************************************
 			Global Functions
 ********************************************************/
@@ -170,6 +125,7 @@ t_void *wlan_ops_uap_process_txpd(t_void *priv, pmlan_buffer pmbuf)
 	t_u32 pkt_type;
 	t_u32 tx_control;
 	t_u8 dst_mac[MLAN_MAC_ADDR_LENGTH];
+	tx_ctrl *ctrl;
 
 	ENTER();
 
@@ -311,6 +267,11 @@ t_void *wlan_ops_uap_process_txpd(t_void *priv, pmlan_buffer pmbuf)
 		mc_ctrl->abs_tsf_expirytime =
 			wlan_cpu_to_le32(pmbuf->u.mc_tx_info.pkt_expiry);
 		mc_ctrl->mc_seq = wlan_cpu_to_le16(pmbuf->u.mc_tx_info.seq_num);
+	}
+
+	if (pmbuf->flags & MLAN_BUF_FLAG_LLDE_PKT_FILTER) {
+		ctrl = (tx_ctrl *)&plocal_tx_pd->tx_control;
+		ctrl->llde_pkt_filter = MTRUE;
 	}
 
 	endian_convert_TxPD(plocal_tx_pd);
@@ -749,13 +710,6 @@ mlan_status wlan_uap_recv_packet(mlan_private *priv, pmlan_buffer pmbuf)
 					MNULL);
 			}
 			goto done;
-		} else if (MLAN_STATUS_FAILURE ==
-			   wlan_check_unicast_packet(
-				   priv, prx_pkt->eth803_hdr.dest_addr)) {
-			/* drop packet */
-			PRINTM(MDATA, "Drop AMSDU dest " MACSTR "\n",
-			       MAC2STR(prx_pkt->eth803_hdr.dest_addr));
-			goto done;
 		}
 	}
 upload:
@@ -956,14 +910,6 @@ mlan_status wlan_process_uap_rx_packet(mlan_private *priv, pmlan_buffer pmbuf)
 				wlan_drop_tx_pkts(priv);
 			wlan_recv_event(priv, MLAN_EVENT_ID_DRV_DEFER_HANDLING,
 					MNULL);
-			goto done;
-		} else if (MLAN_STATUS_FAILURE ==
-			   wlan_check_unicast_packet(
-				   priv, prx_pkt->eth803_hdr.dest_addr)) {
-			PRINTM(MDATA, "Drop Pkts: Rx dest " MACSTR "\n",
-			       MAC2STR(prx_pkt->eth803_hdr.dest_addr));
-			pmbuf->status_code = MLAN_ERROR_PKT_INVALID;
-			pmadapter->ops.data_complete(pmadapter, pmbuf, ret);
 			goto done;
 		}
 	}

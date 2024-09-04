@@ -2258,7 +2258,7 @@ wlan_ret_packet_aggr_over_host_interface(pmlan_private pmpriv,
 		changed = 0;
 		tlv = (*ptlv_buffer) | (*(ptlv_buffer + 1) << 8);
 		switch (tlv) {
-		case MRVL_USB_AGGR_PARAM_TLV_ID:
+		case NXP_USB_AGGR_PARAM_TLV_ID:
 			usb_aggr_param_tlv =
 				(MrvlIETypes_USBAggrParam_t *)ptlv_buffer;
 			misc = (mlan_ds_misc_cfg *)pioctl_buf->pbuf;

@@ -740,7 +740,9 @@ static t_u8 *wlan_strchr(t_u8 *s, int c)
 	while (*pos != '\0') {
 		if (*pos == (t_u8)c)
 			return pos;
-		pos++;
+		if (!wlan_secure_add(&pos, 1, &pos, TYPE_PTR)) {
+			PRINTM(MERROR, "pos is invalid\n");
+		}
 	}
 	return MNULL;
 }
@@ -2390,6 +2392,14 @@ mlan_status wlan_process_cmdresp(mlan_adapter *pmadapter)
 		       "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		wlan_recv_event(pmpriv, MLAN_EVENT_ID_DRV_RGPWR_KEY_MISMATCH,
 				MNULL);
+	}
+	if (cmdresp_result == HostCmd_RESULT_EDMAC_RUTABLE_KEY_MISMATCH) {
+		PRINTM(MERROR,
+		       "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+		PRINTM(MERROR,
+		       " Security Key Mismatch for edmac and rutable \n");
+		PRINTM(MERROR,
+		       "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 	}
 
 	if (pmadapter->curr_cmd->cmd_flag & CMD_F_HOSTCMD) {
@@ -4488,6 +4498,18 @@ mlan_status wlan_cmd_csi(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		csi_cfg_cmd->head_id = wlan_cpu_to_le32(csi_params->head_id);
 		csi_cfg_cmd->tail_id = wlan_cpu_to_le32(csi_params->tail_id);
 		csi_cfg_cmd->chip_id = csi_params->chip_id;
+		csi_cfg_cmd->csi_channel_bandconfig.header.type =
+			wlan_cpu_to_le16(NXP_CSI_MONITOR_TLV_ID);
+		csi_cfg_cmd->csi_channel_bandconfig.header.len =
+			sizeof(MrvlIEtypes_csi_channel_bandcfg_t) -
+			sizeof(MrvlIEtypesHeader_t);
+		csi_cfg_cmd->csi_channel_bandconfig.bandconfig =
+			csi_params->band_config;
+		csi_cfg_cmd->csi_channel_bandconfig.channel =
+			csi_params->channel;
+		csi_cfg_cmd->csi_channel_bandconfig.csi_monitor_enable =
+			csi_params->csi_monitor_enable;
+		csi_cfg_cmd->csi_channel_bandconfig.ra4us = csi_params->ra4us;
 		csi_cfg_cmd->csi_filter_cnt = csi_params->csi_filter_cnt;
 		if (csi_cfg_cmd->csi_filter_cnt > CSI_FILTER_MAX)
 			csi_cfg_cmd->csi_filter_cnt = CSI_FILTER_MAX;
@@ -5837,7 +5859,7 @@ mlan_status wlan_cmd_drcs_cfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 
 	if (cmd_action == HostCmd_ACT_GEN_SET) {
 		channel_time_slicing->header.type =
-			wlan_cpu_to_le16(MRVL_DRCS_TIME_SLICE_TLV_ID);
+			wlan_cpu_to_le16(NXP_DRCS_TIME_SLICE_TLV_ID);
 		channel_time_slicing->header.len =
 			wlan_cpu_to_le16(sizeof(MrvlTypes_DrcsTimeSlice_t) -
 					 sizeof(MrvlIEtypesHeader_t));
@@ -5861,7 +5883,7 @@ mlan_status wlan_cmd_drcs_cfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 			drcs_cfg++;
 			channel_time_slicing = pdrcs_cfg->drcs_buf;
 			channel_time_slicing->header.type =
-				wlan_cpu_to_le16(MRVL_DRCS_TIME_SLICE_TLV_ID);
+				wlan_cpu_to_le16(NXP_DRCS_TIME_SLICE_TLV_ID);
 			channel_time_slicing->header.len = wlan_cpu_to_le16(
 				sizeof(MrvlTypes_DrcsTimeSlice_t) -
 				sizeof(MrvlIEtypesHeader_t));
@@ -5916,7 +5938,7 @@ mlan_status wlan_ret_drcs_cfg(pmlan_private pmpriv,
 	if (pioctl_buf) {
 		pcfg = (mlan_ds_misc_cfg *)pioctl_buf->pbuf;
 		if (wlan_le16_to_cpu(channel_time_slicing->header.type) !=
-			    MRVL_DRCS_TIME_SLICE_TLV_ID ||
+			    NXP_DRCS_TIME_SLICE_TLV_ID ||
 		    wlan_le16_to_cpu(channel_time_slicing->header.len) !=
 			    sizeof(MrvlTypes_DrcsTimeSlice_t) -
 				    sizeof(MrvlIEtypesHeader_t)) {
@@ -5945,7 +5967,7 @@ mlan_status wlan_ret_drcs_cfg(pmlan_private pmpriv,
 			channel_time_slicing1 = presp_cfg->drcs_buf;
 			if (wlan_le16_to_cpu(
 				    channel_time_slicing1->header.type) !=
-				    MRVL_DRCS_TIME_SLICE_TLV_ID ||
+				    NXP_DRCS_TIME_SLICE_TLV_ID ||
 			    wlan_le16_to_cpu(
 				    channel_time_slicing1->header.len) !=
 				    sizeof(MrvlTypes_DrcsTimeSlice_t) -
@@ -6289,6 +6311,9 @@ mlan_status wlan_ret_get_hw_spec(pmlan_private pmpriv, HostCmd_DS_COMMAND *resp,
 	}
 #endif /* STA_SUPPORT */
 
+	pmadapter->fw_country_code = wlan_le16_to_cpu(hw_spec->fw_country_code);
+	PRINTM(MCMND, "GET_HW_SPEC: country_code=0x%X\n",
+	       pmadapter->fw_country_code);
 	pmadapter->fw_release_number =
 		wlan_le32_to_cpu(hw_spec->fw_release_number);
 	pmadapter->number_of_antenna =

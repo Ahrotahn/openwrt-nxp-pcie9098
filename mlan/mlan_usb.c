@@ -1389,6 +1389,7 @@ static mlan_status wlan_usb_evt_complete(pmlan_adapter pmadapter,
 					 mlan_buffer *pmbuf, mlan_status status)
 {
 	ENTER();
+	pmadapter->event_received = MFALSE;
 	pmadapter->event_cause = 0;
 	pmadapter->pmlan_buffer_event = MNULL;
 	pmadapter->callbacks.moal_recv_complete(pmadapter->pmoal_handle, pmbuf,

@@ -1315,6 +1315,7 @@ static int woal_usb_suspend(struct usb_interface *intf, pm_message_t message)
 		goto done;
 	}
 
+	woal_sched_timeout(200);
 	/* Enable Host Sleep */
 	woal_enable_hs(woal_get_priv(handle, MLAN_BSS_ROLE_ANY));
 

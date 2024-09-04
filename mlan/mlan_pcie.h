@@ -490,7 +490,6 @@ mlan_status wlan_set_drv_ready_reg(mlan_adapter *pmadapter, t_u32 val);
 mlan_status wlan_pcie_init(mlan_adapter *pmadapter);
 
 /** Read interrupt status */
-mlan_status wlan_process_msix_int(mlan_adapter *pmadapter);
 /** Transfer data to card */
 mlan_status wlan_pcie_host_to_card(pmlan_private pmpriv, t_u8 type,
 				   mlan_buffer *mbuf, mlan_tx_param *tx_param);

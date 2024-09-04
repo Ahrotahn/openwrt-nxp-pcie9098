@@ -477,6 +477,12 @@ mlan_status wlan_get_info_debug_info(pmlan_adapter pmadapter,
 		debug_info->main_lock_flag = pmadapter->main_lock_flag;
 		debug_info->main_process_cnt = pmadapter->main_process_cnt;
 		debug_info->delay_task_flag = pmadapter->delay_task_flag;
+#ifdef PCIE
+		debug_info->pcie_event_processing =
+			pmadapter->pcie_event_processing;
+		debug_info->pcie_tx_processing = pmadapter->pcie_tx_processing;
+		debug_info->pcie_rx_processing = pmadapter->pcie_rx_processing;
+#endif
 		debug_info->num_cmd_host_to_card_failure =
 			pmadapter->dbg.num_cmd_host_to_card_failure;
 		debug_info->num_cmd_sleep_cfm_host_to_card_failure =
@@ -3728,6 +3734,122 @@ static t_u8 wlan_check_ie_11b_support_rates(pIEEEtypes_Generic_t prates)
 #endif
 
 /**
+ *  @brief check if Apple ie present.
+ *
+ *  @param pmadapter A pointer to mlan_adapter structure
+ *  @param pbuf     A pointer to IE buffer
+ *  @param buf_len  IE buffer len
+ *
+ *  @return         MTRUE/MFALSE
+ */
+static t_u8 wlan_is_apple_ie_present(pmlan_adapter pmadapter, t_u8 *pbuf,
+				     t_u16 buf_len)
+{
+	t_u16 bytes_left = buf_len;
+	IEEEtypes_ElementId_e element_id;
+	t_u8 *pcurrent_ptr = pbuf;
+	t_u8 element_len;
+	t_u16 total_ie_len;
+	IEEEtypes_VendorSpecific_t *pvendor_ie;
+	const t_u8 apple_oui[4] = {0x00, 0x17, 0xf2, 0x0a};
+	t_u8 found_apple_ie = MFALSE;
+
+	ENTER();
+
+	/* Process variable IE */
+	while (bytes_left >= 2) {
+		element_id = (IEEEtypes_ElementId_e)(*((t_u8 *)pcurrent_ptr));
+		element_len = *((t_u8 *)pcurrent_ptr + 1);
+		total_ie_len = element_len + sizeof(IEEEtypes_Header_t);
+
+		if (bytes_left < total_ie_len) {
+			PRINTM(MERROR, "InterpretIE: Error in processing IE, "
+				       "bytes left < IE length\n");
+			bytes_left = 0;
+			continue;
+		}
+		switch (element_id) {
+		case VENDOR_SPECIFIC_221:
+			pvendor_ie = (IEEEtypes_VendorSpecific_t *)pcurrent_ptr;
+			if (!memcmp(pmadapter, pvendor_ie->vend_hdr.oui,
+				    apple_oui, sizeof(apple_oui))) {
+				found_apple_ie = MTRUE;
+				PRINTM(MINFO, "found Apple IE\n");
+			}
+			break;
+		default:
+			break;
+		}
+		pcurrent_ptr += element_len + 2;
+		/* Need to account for IE ID and IE Len */
+		bytes_left -= (element_len + 2);
+		if (found_apple_ie)
+			break;
+	}
+
+	LEAVE();
+	return found_apple_ie;
+}
+
+/**
+ *  @brief This function extracts multi-ap IE
+ *
+ *  @param pmadapter        A pointer to mlan_adapter
+ *  @param pbuf             A pointer to IE buffer
+ *  @param buf_len          IE buffer length
+ *  @param multi_ap_ie      A pointer to Vendor IE
+ *
+ *  @return                 MTRUE - if multi-ap ie found, MFALSE - otherwise
+ */
+static t_u8 wlan_get_multi_ap_ie(pmlan_adapter pmadapter, t_u8 *pbuf,
+				 t_u16 buf_len,
+				 IEEEtypes_Generic_t *multi_ap_ie)
+{
+	t_u16 bytes_left = buf_len;
+	IEEEtypes_ElementId_e element_id;
+	t_u8 *pcurrent_ptr = pbuf;
+	t_u8 element_len;
+	t_u16 total_ie_len;
+	IEEEtypes_Generic_t *pvendor_ie;
+	const t_u8 multi_ap_oui[3] = {0x50, 0x6f, 0x9a};
+
+	ENTER();
+
+	/* Process variable IE */
+	while (bytes_left >= 2) {
+		element_id = (IEEEtypes_ElementId_e)(*((t_u8 *)pcurrent_ptr));
+		element_len = *((t_u8 *)pcurrent_ptr + 1);
+		total_ie_len = element_len + sizeof(IEEEtypes_Header_t);
+
+		if (bytes_left < total_ie_len) {
+			PRINTM(MERROR, "InterpretIE: Error in processing IE, "
+				       "bytes left < IE length\n");
+			bytes_left = 0;
+			continue;
+		}
+
+		if (element_id == VENDOR_SPECIFIC_221) {
+			pvendor_ie = (IEEEtypes_Generic_t *)pcurrent_ptr;
+			if (!memcmp(pmadapter, pvendor_ie->data, multi_ap_oui,
+				    sizeof(multi_ap_oui))) {
+				memcpy_ext(pmadapter, multi_ap_ie, pvendor_ie,
+					   pvendor_ie->ieee_hdr.len +
+						   sizeof(IEEEtypes_Header_t),
+					   sizeof(IEEEtypes_Generic_t));
+				return MTRUE;
+			}
+		}
+
+		pcurrent_ptr += element_len + 2;
+		/* Need to account for IE ID and IE Len */
+		bytes_left -= (element_len + 2);
+	}
+
+	LEAVE();
+	return MFALSE;
+}
+
+/**
  *  @brief This function will search for the specific ie
  *
  *  @param priv    A pointer to mlan_private
@@ -3808,6 +3930,12 @@ void wlan_check_sta_capability(pmlan_private priv, pmlan_buffer pevent,
 							       ie_len);
 				PRINTM(MCMND, "STA: is_wmm_enabled=%d\n",
 				       sta_ptr->is_wmm_enabled);
+				sta_ptr->is_apple_sta =
+					wlan_is_apple_ie_present(priv->adapter,
+								 assoc_req_ie,
+								 ie_len);
+				PRINTM(MINFO, "STA: is Apple device=%d\n",
+				       sta_ptr->is_apple_sta);
 				pht_cap = (IEEEtypes_HTCap_t *)
 					wlan_get_specific_ie(priv, assoc_req_ie,
 							     ie_len,
@@ -3912,6 +4040,9 @@ void wlan_check_sta_capability(pmlan_private priv, pmlan_buffer pevent,
 						sta_ptr->bandmode = BAND_G;
 				} else
 					sta_ptr->bandmode = BAND_A;
+				sta_ptr->is_multi_ap = wlan_get_multi_ap_ie(
+					priv->adapter, assoc_req_ie, ie_len,
+					&sta_ptr->multi_ap_ie);
 #endif
 				break;
 			}

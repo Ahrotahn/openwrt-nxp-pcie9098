@@ -1810,6 +1810,7 @@ done:
 
 #define HOST_TO_CARD_EVENT_REG 0x00
 #define HOST_TO_CARD_EVENT MBIT(3)
+#define HOST_RST_EVENT MBIT(4)
 
 typedef enum {
 	DUMP_TYPE_ITCM = 0,
@@ -2410,6 +2411,24 @@ done:
 	return;
 }
 
+static void woal_trigger_nmi_on_no_dump_event(moal_handle *phandle)
+{
+	int ret = 0;
+	t_u8 ctrl_data = 0;
+	t_u8 dbg_dump_ctrl_reg = phandle->card_info->dump_fw_ctrl_reg;
+	phandle->init_wait_q_woken = MFALSE;
+	ret = woal_sdio_readb(phandle, dbg_dump_ctrl_reg, &ctrl_data);
+	if (ctrl_data == 0xAA) {
+		ret = wait_event_timeout(phandle->init_wait_q,
+					 phandle->init_wait_q_woken, 2 * HZ);
+		if (!ret) {
+			PRINTM(MMSG, "Trigger NMI FW dump...\n");
+			ret = woal_sdio_writeb(phandle, HOST_TO_CARD_EVENT_REG,
+					       HOST_RST_EVENT);
+		}
+	}
+}
+
 /**
  *  @brief This function dump firmware memory to file
  *
@@ -2747,7 +2766,7 @@ static void woal_sdiommc_dump_fw_info(moal_handle *phandle)
 	} else if (phandle->card_info->dump_fw_info == DUMP_FW_SDIO_V3) {
 		woal_dump_firmware_info_v3(phandle);
 		if (phandle->event_fw_dump) {
-			phandle->event_fw_dump = MFALSE;
+			woal_trigger_nmi_on_no_dump_event(phandle);
 			queue_work(phandle->workqueue, &phandle->main_work);
 			phandle->is_fw_dump_timer_set = MTRUE;
 			woal_mod_timer(&phandle->fw_dump_timer, MOAL_TIMER_5S);
@@ -3107,17 +3126,6 @@ static mlan_status woal_do_sdiommc_flr(moal_handle *handle, bool prepare,
 		}
 		handle->pmlan_adapter = NULL;
 	}
-#ifdef DUMP_TO_PROC
-	if (handle->fw_dump_buf) {
-		moal_vfree(handle, handle->fw_dump_buf);
-		handle->fw_dump_buf = NULL;
-		handle->fw_dump_len = 0;
-	}
-#endif
-#ifdef SD9177
-	if (IS_SD9177(handle->card_type))
-		handle->event_fw_dump = MTRUE;
-#endif
 	handle->fw_dump = MFALSE;
 
 	goto exit;

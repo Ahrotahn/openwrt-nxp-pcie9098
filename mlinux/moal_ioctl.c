@@ -3229,6 +3229,9 @@ done:
 	return ret;
 }
 
+#define ICMPV6_HEADER_TYPE "\x3a"
+#define IPV6_HEADER_TYPE "\x86\xdd"
+#define TYPE_NS "\x87"
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 1, 0)
 /**
  *  @brief Enable IPv6 Neighbor Solicitation offload
@@ -3275,7 +3278,7 @@ static mlan_status woal_set_ipv6_ns_offload(moal_handle *handle, t_u8 enable)
 	filter->repeat = 1;
 	filter->offset = 20;
 	filter->num_byte_seq = 2;
-	moal_memcpy_ext(handle, filter->byte_seq, "\x86\xdd", 2,
+	moal_memcpy_ext(handle, filter->byte_seq, IPV6_HEADER_TYPE, 2,
 			sizeof(filter->byte_seq));
 	entry->rpn[1] = RPN_TYPE_AND;
 
@@ -3284,11 +3287,22 @@ static mlan_status woal_set_ipv6_ns_offload(moal_handle *handle, t_u8 enable)
 			     FILLING_BYTE_SEQ);
 	filter->type = TYPE_BYTE_EQ;
 	filter->repeat = 1;
+	filter->offset = 28;
+	filter->num_byte_seq = 1;
+	moal_memcpy_ext(handle, filter->byte_seq, ICMPV6_HEADER_TYPE, 1,
+			sizeof(filter->byte_seq));
+	entry->rpn[2] = RPN_TYPE_AND;
+
+	filter++;
+	filter->fill_flag = (FILLING_TYPE | FILLING_REPEAT | FILLING_OFFSET |
+			     FILLING_BYTE_SEQ);
+	filter->type = TYPE_BYTE_EQ;
+	filter->repeat = 1;
 	filter->offset = 62;
 	filter->num_byte_seq = 1;
-	moal_memcpy_ext(handle, filter->byte_seq, "\x87", 1,
+	moal_memcpy_ext(handle, filter->byte_seq, TYPE_NS, 1,
 			sizeof(filter->byte_seq));
-	entry->filter_num = 2;
+	entry->filter_num = 3;
 	if (enable) {
 		mef_cfg->op_code = MLAN_OP_ADD_IPV6_NS;
 	} else {
