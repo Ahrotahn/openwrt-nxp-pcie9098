@@ -1224,7 +1224,7 @@ void woal_clean_up(moal_handle *handle)
 		handle->cac_period = MFALSE;
 		priv = handle->priv[handle->cac_bss_index];
 		if (priv) {
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
 			cfg80211_cac_event(priv->netdev, &handle->dfs_channel,
 					   NL80211_RADAR_CAC_ABORTED,
 					   GFP_KERNEL, 0);

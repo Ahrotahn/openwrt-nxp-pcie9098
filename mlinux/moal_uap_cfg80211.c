@@ -3168,7 +3168,10 @@ int woal_cfg80211_del_beacon(struct wiphy *wiphy, struct net_device *dev)
 		if (woal_11h_cancel_chan_report_ioctl(priv, MOAL_IOCTL_WAIT))
 			PRINTM(MERROR, "%s: cancel chan report failed \n",
 			       __func__);
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+		cfg80211_cac_event(priv->netdev, &priv->phandle->dfs_channel,
+				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL, 0);
+#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 		cfg80211_cac_event(priv->netdev, &priv->phandle->dfs_channel,
 				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL);
 #else
@@ -3848,7 +3851,10 @@ void woal_cac_timer_func(void *context)
 	moal_private *priv = handle->priv[handle->cac_bss_index];
 
 	PRINTM(MEVENT, "cac_timer fired.\n");
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+	cfg80211_cac_event(priv->netdev, &handle->dfs_channel,
+			   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL, 0);
+#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 	cfg80211_cac_event(priv->netdev, &handle->dfs_channel,
 			   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL);
 #else
@@ -4007,7 +4013,10 @@ void woal_process_cancel_chanrpt_event(moal_private *priv)
 		if (woal_11h_cancel_chan_report_ioctl(priv, MOAL_IOCTL_WAIT))
 			PRINTM(MERROR, "%s: cancel chan report failed \n",
 			       __func__);
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+		cfg80211_cac_event(priv->netdev, &priv->phandle->dfs_channel,
+				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL, 0);
+#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 		cfg80211_cac_event(priv->netdev, &priv->phandle->dfs_channel,
 				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL);
 #else
@@ -4021,7 +4030,22 @@ void woal_process_cancel_chanrpt_event(moal_private *priv)
 }
 #endif
 
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+/**
+ * @brief start radar detection
+ *
+ * @param wiphy           A pointer to wiphy structure
+ * @param dev             A pointer to net_device structure
+ * @param chandef         A pointer to cfg80211_chan_def structure
+ * @param cac_time_ms     A cac dwell time
+ * @param link_id	   valid link_id for MLO operation or 0 otherwise.
+ * @return                0 -- success, otherwise fail
+ */
+int woal_cfg80211_start_radar_detection(struct wiphy *wiphy,
+					struct net_device *dev,
+					struct cfg80211_chan_def *chandef,
+					u32 cac_time_ms, int link_id)
+#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 15, 0)
 /**
  * @brief start radar detection
  *

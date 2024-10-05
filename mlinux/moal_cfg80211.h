@@ -472,7 +472,12 @@ int woal_cfg80211_del_station(struct wiphy *wiphy, struct net_device *dev,
 #endif
 
 #if KERNEL_VERSION(3, 12, 0) <= CFG80211_VERSION_CODE
-#if KERNEL_VERSION(3, 15, 0) <= CFG80211_VERSION_CODE
+#if KERNEL_VERSION(6, 12, 0) <= CFG80211_VERSION_CODE
+int woal_cfg80211_start_radar_detection(struct wiphy *wiphy,
+					struct net_device *dev,
+					struct cfg80211_chan_def *chandef,
+					u32 cac_time_msi, int link_id);
+#elif KERNEL_VERSION(3, 15, 0) <= CFG80211_VERSION_CODE
 int woal_cfg80211_start_radar_detection(struct wiphy *wiphy,
 					struct net_device *dev,
 					struct cfg80211_chan_def *chandef,

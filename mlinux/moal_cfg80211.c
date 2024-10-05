@@ -1105,7 +1105,10 @@ void woal_cancel_cac(moal_private *priv)
 		if (woal_11h_cancel_chan_report_ioctl(priv, MOAL_IOCTL_WAIT))
 			PRINTM(MERROR, "%s: cancel chan report failed \n",
 			       __func__);
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+		cfg80211_cac_event(priv->netdev, &priv->phandle->dfs_channel,
+				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL, 0);
+#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 		cfg80211_cac_event(priv->netdev, &priv->phandle->dfs_channel,
 				   NL80211_RADAR_CAC_ABORTED, GFP_KERNEL);
 #else
@@ -1200,7 +1203,12 @@ int woal_cfg80211_change_virtual_intf(struct wiphy *wiphy,
 				PRINTM(MERROR,
 				       "%s: cancel chan report failed \n",
 				       __func__);
-#if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+			cfg80211_cac_event(priv->netdev,
+					   &priv->phandle->dfs_channel,
+					   NL80211_RADAR_CAC_ABORTED,
+					   GFP_KERNEL, 0);
+#elif CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 			cfg80211_cac_event(priv->netdev,
 					   &priv->phandle->dfs_channel,
 					   NL80211_RADAR_CAC_ABORTED,
