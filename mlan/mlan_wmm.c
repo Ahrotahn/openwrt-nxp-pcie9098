@@ -840,11 +840,11 @@ static raListTbl *wlan_wmm_get_highest_priolist_ptr(pmlan_adapter pmadapter,
  *
  *  @return                 byte budget
  */
-static t_u32 wlan_wmm_get_byte_budget(t_u32 time_budget_us, t_u32 phy_rate_kbps)
+static t_u32 wlan_wmm_get_byte_budget(pmlan_adapter pmadapter, t_u32 time_budget_us, t_u32 phy_rate_kbps)
 {
 	const t_u32 min_budget = MV_ETH_FRAME_LEN;
-	t_u64 byte_budget =
-		((t_u64)phy_rate_kbps * time_budget_us) / (8 * 1000u);
+	t_u64 byte_budget = pmadapter->callbacks.moal_do_div((t_u64)phy_rate_kbps * time_budget_us,
+		8 * 1000u);
 
 	if (byte_budget > INT_MAX)
 		return INT_MAX;
@@ -891,7 +891,7 @@ wlan_wmm_allocate_sta_table(pmlan_adapter pmadapter, t_u8 *ra)
 
 	sta_table->budget.time_budget_init_us = pmadapter->init_para.tx_budget;
 	sta_table->budget.byte_budget_init = wlan_wmm_get_byte_budget(
-		sta_table->budget.time_budget_init_us, default_rate);
+		pmadapter, sta_table->budget.time_budget_init_us, default_rate);
 	sta_table->budget.queue_packets = default_queue_packets;
 	sta_table->budget.phy_rate_kbps = default_rate;
 
@@ -900,14 +900,14 @@ wlan_wmm_allocate_sta_table(pmlan_adapter pmadapter, t_u8 *ra)
 	sta_table->budget.mpdu_no_amsdu_pps_cap =
 		pmadapter->tx_mpdu_no_amsdu_pps;
 
-	sta_table->budget.mpdu_with_amsdu_budget_init =
-		((t_u64)sta_table->budget.mpdu_with_amsdu_pps_cap *
-		 sta_table->budget.time_budget_init_us) /
-		1000000;
-	sta_table->budget.mpdu_no_amsdu_budget_init =
-		((t_u64)sta_table->budget.mpdu_no_amsdu_pps_cap *
-		 sta_table->budget.time_budget_init_us) /
-		1000000;
+	sta_table->budget.mpdu_with_amsdu_budget_init = pmadapter->callbacks.moal_do_div(
+		(t_u64)sta_table->budget.mpdu_with_amsdu_pps_cap *
+		 sta_table->budget.time_budget_init_us,
+		1000000);
+	sta_table->budget.mpdu_no_amsdu_budget_init = pmadapter->callbacks.moal_do_div(
+		(t_u64)sta_table->budget.mpdu_no_amsdu_pps_cap *
+		 sta_table->budget.time_budget_init_us,
+		1000000);
 
 	for (i = 0; i < NELEMENTS(sta_table->budget.bytes); ++i) {
 		sta_table->budget.bytes[i] = sta_table->budget.byte_budget_init;
@@ -3142,11 +3142,11 @@ static t_void wlan_wmm_update_queue_packets_budget(pmlan_adapter pmadapter,
 			list_entry, struct wmm_sta_table, active_sta_entry);
 		const t_u64 sta_capacity = sta->budget.byte_budget_init;
 		const t_u32 max_pkts_by_airtime =
-			wlan_wmm_get_byte_budget(max_pending_tx_time_us,
+			wlan_wmm_get_byte_budget(pmadapter, max_pending_tx_time_us,
 						 sta->budget.phy_rate_kbps) /
 			MV_ETH_FRAME_LEN;
-		t_u32 sta_share =
-			queue_packets_limit * sta_capacity / total_capacity;
+		t_u32 sta_share = pmadapter->callbacks.moal_do_div((t_u64)queue_packets_limit * sta_capacity,
+									total_capacity);
 
 		sta_share = MAX(sta_share, min_sta_share);
 		sta_share = MIN(sta_share, queue_packets_limit * 7 / 8);
@@ -5183,6 +5183,7 @@ static void wlan_wmm_adjust_sta_tx_budget(pmlan_private priv,
 					  struct wmm_sta_table *sta,
 					  HostCmd_TX_RATE_QUERY *rate)
 {
+	mlan_adapter *pmadapter = priv->adapter;
 	const t_u8 ppdu_type_legacy = 0;
 	const t_u8 ppdu_type_ht = 1;
 	const t_u8 ppdu_type_vht = 2;
@@ -5210,7 +5211,7 @@ static void wlan_wmm_adjust_sta_tx_budget(pmlan_private priv,
 	if (phy_rate > 0) {
 		const t_u32 old_phy_rate = sta->budget.phy_rate_kbps;
 		sta->budget.byte_budget_init = wlan_wmm_get_byte_budget(
-			sta->budget.time_budget_init_us, phy_rate);
+			pmadapter, sta->budget.time_budget_init_us, phy_rate);
 		sta->budget.phy_rate_kbps = phy_rate;
 
 		if (old_phy_rate / phy_rate >= 2 ||
