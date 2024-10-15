@@ -3322,7 +3322,8 @@ static int woal_sdiommc_reset_fw(moal_handle *handle)
 		ret = -EFAULT;
 		goto done;
 	}
-	udelay(4000);
+	udelay(2000);
+	udelay(2000);
 	/** wait SOC fully wake up */
 	for (tries = 0; tries < MAX_POLL_TRIES; ++tries) {
 		ret = handle->ops.write_reg(handle, reset_reg, 0xba);
