@@ -636,7 +636,7 @@ static void woal_pcie_remove(struct pci_dev *dev)
 	}
 	cancel_work_sync(&card->reset_work);
 	handle = card->handle;
-	if (!handle || !handle->priv_num) {
+	if (!handle) {
 		PRINTM(MINFO, "PCIE card handle removed\n");
 		woal_pcie_cleanup(card);
 		kfree(card);
@@ -958,7 +958,8 @@ static void woal_pcie_reset_prepare(struct pci_dev *pdev)
 	handle->fw_reseting = MTRUE;
 	// TODO: Can add more chips once the related code has been ported to fw
 	// v18
-	if (IS_PCIE9097(handle->card_type) || IS_PCIE9098(handle->card_type)) {
+	if (IS_PCIE9097(handle->card_type) || IS_PCIE9098(handle->card_type) ||
+	    IS_PCIEAW693(handle->card_type)) {
 		woal_reset_adma(handle);
 	}
 
@@ -1077,7 +1078,8 @@ static void woal_pcie_reset_notify(struct pci_dev *pdev, bool prepare)
 		// TODO: Can add more chips once the related code has been
 		// ported to fw v18
 		if (IS_PCIE9097(handle->card_type) ||
-		    IS_PCIE9098(handle->card_type)) {
+		    IS_PCIE9098(handle->card_type) ||
+		    IS_PCIEAW693(handle->card_type)) {
 			woal_reset_adma(handle);
 		}
 		woal_do_flr(handle, prepare, true);
@@ -1161,6 +1163,7 @@ static mlan_status woal_pcie_write_reg(moal_handle *handle, t_u32 reg,
 	pcie_service_card *card = (pcie_service_card *)handle->card;
 
 	iowrite32(data, card->pci_mmap1 + reg);
+	PRINTM(MREG, "pcie w %x = %x\n", reg, data);
 
 	return MLAN_STATUS_SUCCESS;
 }
@@ -1179,6 +1182,7 @@ static mlan_status woal_pcie_read_reg(moal_handle *handle, t_u32 reg,
 {
 	pcie_service_card *card = (pcie_service_card *)handle->card;
 	*data = ioread32(card->pci_mmap1 + reg);
+	PRINTM(MREG, "pcie r %x = %x\n", reg, *data);
 
 	if (*data == MLAN_STATUS_FAILURE)
 		return MLAN_STATUS_FAILURE;
@@ -2610,7 +2614,7 @@ static mlan_status woal_pcie_get_fw_name(moal_handle *handle)
 	t_u32 strap = 0;
 	t_u32 magic = 0;
 #endif
-#ifdef PCIEIW624
+#if defined(PCIEIW624) || defined(PCIEAW693)
 	t_u32 boot_mode_reg = handle->card_info->boot_mode_reg;
 	t_u32 boot_mode;
 #endif
@@ -2635,6 +2639,21 @@ static mlan_status woal_pcie_get_fw_name(moal_handle *handle)
 				handle->card_rev = CHIP_9097_REV_B0;
 				break;
 			default:
+				break;
+			}
+		}
+#endif
+#ifdef PCIEAW693
+		if (IS_PCIEAW693(handle->card_type)) {
+			woal_pcie_read_reg(handle, rev_id_reg, &revision_id);
+			revision_id &= 0xff;
+			PRINTM(MCMND, "revision_id=0x%x\n", revision_id);
+			switch (revision_id) {
+			case PCIEAW693_A1:
+				handle->card_rev = CHIP_AW693_REV_A1;
+				break;
+			default:
+				handle->card_rev = CHIP_AW693_REV_A0;
 				break;
 			}
 		}
@@ -2776,23 +2795,84 @@ static mlan_status woal_pcie_get_fw_name(moal_handle *handle)
 			woal_pcie_read_reg(handle, rev_id_reg, &revision_id);
 			woal_pcie_read_reg(handle, host_strap_reg, &strap);
 			woal_pcie_read_reg(handle, magic_reg, &magic);
+			woal_pcie_read_reg(handle, boot_mode_reg, &boot_mode);
 			revision_id &= 0xff;
 			strap &= 0x7;
 			magic &= 0xff;
+			boot_mode &= 0x03;
 			PRINTM(MCMND,
-			       "magic=0x%x, strap=0x%x, revision_id=0x%x\n",
-			       magic, strap, revision_id);
-			if (magic == CHIP_MAGIC_VALUE) {
-				if (strap == CARD_TYPE_PCIE_UART)
-					strcpy(handle->card_info->fw_name,
-					       PCIEUARTAW693_DEFAULT_COMBO_FW_NAME);
-				else
-					strcpy(handle->card_info->fw_name,
-					       PCIEAW693_DEFAULT_COMBO_FW_NAME);
+			       "magic=0x%x, boot_mode=0x%x, strap=0x%x, revision_id=0x%x\n",
+			       magic, boot_mode, strap, revision_id);
+			if (boot_mode == 0x03)
+				PRINTM(MMSG,
+				       "wlan: PCIE-AW693 in secure-boot mode\n");
+
+			switch (revision_id) {
+			case PCIEAW693_A1:
+				handle->card_rev = CHIP_AW693_REV_A1;
+				if (magic == CHIP_MAGIC_VALUE) {
+					if (strap == CARD_TYPE_PCIE_UART)
+						strcpy(handle->card_info
+							       ->fw_name,
+						       PCIEUARTAW693_COMBO_V1_FW_NAME);
+					else
+						strcpy(handle->card_info
+							       ->fw_name,
+						       PCIEAW693_COMBO_V1_FW_NAME);
+				}
+				strcpy(handle->card_info->fw_name_wlan,
+				       PCIEAW693_WLAN_V1_FW_NAME);
+				if (boot_mode != 0x03) {
+					/* remove extension .se */
+					if (strstr(handle->card_info->fw_name,
+						   ".se"))
+						memset(strstr(handle->card_info
+								      ->fw_name,
+							      ".se"),
+						       '\0', sizeof(".se"));
+					if (strstr(handle->card_info
+							   ->fw_name_wlan,
+						   ".se"))
+						memset(strstr(handle->card_info
+								      ->fw_name_wlan,
+							      ".se"),
+						       '\0', sizeof(".se"));
+				}
+				break;
+			case PCIEAW693_A0:
+				handle->card_rev = CHIP_AW693_REV_A0;
+				if (magic == CHIP_MAGIC_VALUE) {
+					if (strap == CARD_TYPE_PCIE_UART)
+						strcpy(handle->card_info
+							       ->fw_name,
+						       PCIEUARTAW693_DEFAULT_COMBO_FW_NAME);
+					else
+						strcpy(handle->card_info
+							       ->fw_name,
+						       PCIEAW693_DEFAULT_COMBO_FW_NAME);
+				}
+				strcpy(handle->card_info->fw_name_wlan,
+				       PCIEAW693_DEFAULT_WLAN_FW_NAME);
+				break;
+			default:
+				break;
 			}
 		} else {
 			ref_handle = (moal_handle *)handle->pref_mac;
 			if (ref_handle) {
+				woal_pcie_read_reg(handle, rev_id_reg,
+						   &revision_id);
+				revision_id &= 0xff;
+				PRINTM(MCMND, "revision_id=0x%x\n",
+				       revision_id);
+				switch (revision_id) {
+				case PCIEAW693_A1:
+					handle->card_rev = CHIP_AW693_REV_A1;
+					break;
+				default:
+					handle->card_rev = CHIP_AW693_REV_A0;
+					break;
+				}
 				strcpy(handle->card_info->fw_name,
 				       ref_handle->card_info->fw_name);
 				strcpy(handle->card_info->fw_name_wlan,
@@ -2933,7 +3013,8 @@ static void woal_pcie_work(struct work_struct *work)
 	handle->fw_reseting = MTRUE;
 	// TODO: Can add more chips once the related code has been ported to fw
 	// v18
-	if (IS_PCIE9097(handle->card_type) || IS_PCIE9098(handle->card_type)) {
+	if (IS_PCIE9097(handle->card_type) || IS_PCIE9098(handle->card_type) ||
+	    IS_PCIEAW693(handle->card_type)) {
 		woal_reset_adma(handle);
 	}
 	woal_do_flr(handle, true, true);

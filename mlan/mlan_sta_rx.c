@@ -39,58 +39,6 @@ Change log:
 		Local Variables
 ********************************************************/
 
-/** IPv4 ARP request header */
-typedef MLAN_PACK_START struct {
-	/** Hardware type */
-	t_u16 Htype;
-	/** Protocol type */
-	t_u16 Ptype;
-	/** Hardware address length */
-	t_u8 addr_len;
-	/** Protocol address length */
-	t_u8 proto_len;
-	/** Operation code */
-	t_u16 op_code;
-	/** Source mac address */
-	t_u8 src_mac[MLAN_MAC_ADDR_LENGTH];
-	/** Sender IP address */
-	t_u8 src_ip[4];
-	/** Destination mac address */
-	t_u8 dst_mac[MLAN_MAC_ADDR_LENGTH];
-	/** Destination IP address */
-	t_u8 dst_ip[4];
-} MLAN_PACK_END IPv4_ARP_t;
-
-/** IPv6 Nadv packet header */
-typedef MLAN_PACK_START struct {
-	/** IP protocol version */
-	t_u8 version;
-	/** flow label */
-	t_u8 flow_lab[3];
-	/** Payload length */
-	t_u16 payload_len;
-	/** Next header type */
-	t_u8 next_hdr;
-	/** Hot limit */
-	t_u8 hop_limit;
-	/** Source address */
-	t_u8 src_addr[16];
-	/** Destination address */
-	t_u8 dst_addr[16];
-	/** ICMP type */
-	t_u8 icmp_type;
-	/** IPv6 Code */
-	t_u8 ipv6_code;
-	/** IPv6 Checksum */
-	t_u16 ipv6_checksum;
-	/** Flags */
-	t_u32 flags;
-	/** Target address */
-	t_u8 taget_addr[16];
-	/** Reserved */
-	t_u8 rev[8];
-} MLAN_PACK_END IPv6_Nadv_t;
-
 /********************************************************
 		Global functions
 ********************************************************/
@@ -122,8 +70,8 @@ static t_u8 discard_gratuitous_ARP_msg(RxPacketHdr_t *prx_pkt,
 		/* Graguitous ARP can be ARP request or ARP reply*/
 		if ((parp_hdr->op_code == mlan_htons(0x01)) ||
 		    (parp_hdr->op_code == mlan_htons(0x02)))
-			if (memcmp(pmadapter, parp_hdr->src_ip,
-				   parp_hdr->dst_ip, 4) == 0)
+			if (memcmp(pmadapter, parp_hdr->sender_ip,
+				   parp_hdr->target_ip, 4) == 0)
 				ret = MTRUE;
 	}
 

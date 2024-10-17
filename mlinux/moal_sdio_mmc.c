@@ -36,10 +36,22 @@ Change log:
 #include <net/addrconf.h>
 #endif
 #endif
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
+#include <linux/gpio.h>
+#include <uapi/linux/sched/types.h>
+#endif
 
 /** define nxp vendor id */
 #define NXP_VENDOR_ID 0x0471
 #define MRVL_VENDOR_ID 0x02df
+/* The macros below are hardware platform dependent.
+   The definition should match the actual platform */
+/** Initialize GPIO port */
+#define GPIO_PORT_INIT()
+/** Set GPIO port to high */
+#define GPIO_PORT_TO_HIGH()
+/** Set GPIO port to low */
+#define GPIO_PORT_TO_LOW()
 
 /********************************************************
 		Local Variables
@@ -102,9 +114,9 @@ static moal_if_ops sdiommc_ops;
 /** Device ID for SDIW624 */
 #define SD_DEVICE_ID_IW624 (0x020D)
 #endif
-#ifdef SDIW615
-/** Device ID for SDIW615 */
-#define SD_DEVICE_ID_IW615 (0x020D)
+#ifdef SDIW610
+/** Device ID for SDIW610 */
+#define SD_DEVICE_ID_IW610 (0x0215)
 #endif
 
 /** WLAN IDs */
@@ -147,8 +159,8 @@ static const struct sdio_device_id wlan_ids[] = {
 #ifdef SDIW624
 	{SDIO_DEVICE(NXP_VENDOR_ID, SD_DEVICE_ID_IW624)},
 #endif
-#ifdef SDIW615
-	{SDIO_DEVICE(NXP_VENDOR_ID, SD_DEVICE_ID_IW615)},
+#ifdef SDIW610
+	{SDIO_DEVICE(NXP_VENDOR_ID, SD_DEVICE_ID_IW610)},
 #endif
 	{},
 };
@@ -208,6 +220,7 @@ static struct sdio_driver REFDATA wlan_sdio = {
 		Local Functions
 ********************************************************/
 static void woal_sdiommc_dump_fw_info(moal_handle *phandle);
+static void woal_trigger_nmi_on_no_dump_event(moal_handle *phandle);
 #if 0
 /**  @brief This function dump the sdio register
  *
@@ -309,6 +322,245 @@ static void woal_sdio_interrupt(struct sdio_func *func)
 	handle->main_state = MOAL_END_MAIN_PROCESS;
 	LEAVE();
 }
+
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
+/**
+ * @brief This work handles oob sdio top irq.
+ */
+static void woal_sdio_oob_irq_work(struct work_struct *work)
+{
+	sdio_mmc_card *card =
+		container_of(work, sdio_mmc_card, sdio_oob_irq_work);
+	struct mmc_card *mmc_card = card->func->card;
+	struct sdio_func *func;
+	unsigned char pending;
+	int i;
+	int ret;
+
+	for (i = 0; i < mmc_card->sdio_funcs; i++) {
+		func = NULL;
+		if (mmc_card->sdio_func[i]) {
+			func = mmc_card->sdio_func[i];
+		}
+		if (func) {
+			sdio_claim_host(func);
+			pending = sdio_f0_readb(func, SDIO_CCCR_INTx, &ret);
+			if (!ret && pending && func->irq_handler)
+				func->irq_handler(func);
+			sdio_release_host(func);
+		}
+	}
+
+	if (card->irq_registered && !card->irq_enabled) {
+		card->irq_enabled = MTRUE;
+		enable_irq(card->oob_irq);
+	}
+}
+
+/**
+ *  @brief oob_sdio_irq interrupt handler.
+ *
+ *  @param irq     irq
+ *  @param dev_id   a pointer to structure sdio_mmc_card
+ *  @return         IRQ_HANDLED
+ */
+static irqreturn_t oob_sdio_irq(int irq, void *dev_id)
+{
+	sdio_mmc_card *card = (sdio_mmc_card *)dev_id;
+
+	if (card->sdio_func_intr_enabled) {
+		disable_irq_nosync(card->oob_irq);
+		card->irq_enabled = MFALSE;
+		queue_work(card->sdio_oob_irq_workqueue,
+			   &card->sdio_oob_irq_work);
+	}
+
+	return IRQ_HANDLED;
+}
+
+/**
+ *  @brief This function registers oob_sdio_irq
+ *
+ *  @param card    a pointer to sdio_mmc_card
+ *  @return         0-success else failure
+ */
+static int oob_sdio_irq_register(sdio_mmc_card *card)
+{
+	int ret = 0;
+
+	ret = devm_request_irq(card->handle->hotplug_device, card->oob_irq,
+			       oob_sdio_irq, IRQF_TRIGGER_LOW | IRQF_SHARED,
+			       "nxp_oob_sdio_irq", card);
+
+	if (!ret) {
+		card->irq_registered = MTRUE;
+		card->irq_enabled = MTRUE;
+		enable_irq_wake(card->oob_irq);
+	}
+
+	return ret;
+}
+
+/**
+ *  @brief This function unregister oob_sdio_irq
+ *
+ *  @param card    a pointer to sdio_mmc_card
+ *  @return         N/A
+ */
+static void oob_sdio_irq_unregister(sdio_mmc_card *card)
+{
+	if (card->irq_registered) {
+		card->irq_registered = MFALSE;
+		disable_irq_wake(card->oob_irq);
+		if (card->irq_enabled) {
+			disable_irq(card->oob_irq);
+			card->irq_enabled = MFALSE;
+		}
+		devm_free_irq(card->handle->hotplug_device, card->oob_irq,
+			      card);
+	}
+}
+
+/**
+ *  @brief This function enable interrupt in SDIO Func0 SDIO_CCCR_IENx
+ *
+ *  @param func    a pointer to struct sdio_func
+ *  @param handler  sdio_irq_handler
+ *  @return         0-success else failure
+ */
+static int sdio_func_intr_enable(struct sdio_func *func,
+				 sdio_irq_handler_t *handler)
+{
+	int ret;
+	unsigned char reg;
+
+#ifdef MMC_QUIRK_LENIENT_FN0
+	func->card->quirks |= MMC_QUIRK_LENIENT_FN0;
+#endif
+	reg = sdio_f0_readb(func, SDIO_CCCR_IENx, &ret);
+	if (ret)
+		return ret;
+	reg |= 1 << func->num;
+	reg |= 1;
+	sdio_f0_writeb(func, reg, SDIO_CCCR_IENx, &ret);
+	if (ret)
+		return ret;
+
+	func->irq_handler = handler;
+
+	return ret;
+}
+
+/**
+ *  @brief This function disable interrupt in SDIO Func0 SDIO_CCCR_IENx
+ *
+ *  @param func    a pointer to struct sdio_func
+ *  @return         0-success else failure
+ */
+static int sdio_func_intr_disable(struct sdio_func *func)
+{
+	int ret;
+	unsigned char reg;
+
+#ifdef MMC_QUIRK_LENIENT_FN0
+	func->card->quirks |= MMC_QUIRK_LENIENT_FN0;
+#endif
+	if (func->irq_handler)
+		func->irq_handler = NULL;
+
+	reg = sdio_f0_readb(func, SDIO_CCCR_IENx, &ret);
+	if (ret)
+		return ret;
+	reg &= ~(1 << func->num);
+	if (!(reg & 0xFE))
+		reg = 0;
+	sdio_f0_writeb(func, reg, SDIO_CCCR_IENx, &ret);
+
+	return ret;
+}
+
+/**
+ *  @brief This function claim the oob sdio irq
+ *
+ *  @param card    a pointer to sdio_mmc_card
+ *  @param handler  sdio_irq_handler
+ *  @return         0-success else failure
+ */
+static int woal_sdio_claim_irq(sdio_mmc_card *card, sdio_irq_handler_t *handler)
+{
+	int ret;
+	struct sdio_func *func = card->func;
+
+	BUG_ON(!func);
+	BUG_ON(!func->card);
+
+	card->sdio_oob_irq_workqueue = alloc_ordered_workqueue(
+		"SDIO_OOB_IRQ_WORKQ",
+		__WQ_LEGACY | WQ_MEM_RECLAIM | WQ_HIGHPRI);
+	MLAN_INIT_WORK(&card->sdio_oob_irq_work, woal_sdio_oob_irq_work);
+	ret = oob_sdio_irq_register(card);
+	if (ret) {
+		destroy_workqueue(card->sdio_oob_irq_workqueue);
+		card->sdio_oob_irq_workqueue = NULL;
+		return ret;
+	}
+	ret = sdio_func_intr_enable(func, handler);
+	if (ret) {
+		oob_sdio_irq_unregister(card);
+		destroy_workqueue(card->sdio_oob_irq_workqueue);
+		card->sdio_oob_irq_workqueue = NULL;
+	}
+	card->sdio_func_intr_enabled = MTRUE;
+	return ret;
+}
+
+/**
+ *  @brief This function release the oob sdio irq
+ *
+ *  @param card    a pointer to sdio_mmc_card
+ *  @return         0-success else failure
+ */
+static int woal_sdio_release_irq(sdio_mmc_card *card)
+{
+	struct sdio_func *func = card->func;
+	BUG_ON(!func);
+	BUG_ON(!func->card);
+
+	oob_sdio_irq_unregister(card);
+	flush_workqueue(card->sdio_oob_irq_workqueue);
+	destroy_workqueue(card->sdio_oob_irq_workqueue);
+	card->sdio_oob_irq_workqueue = NULL;
+
+	if (card->sdio_func_intr_enabled) {
+		sdio_func_intr_disable(func);
+		card->sdio_func_intr_enabled = MFALSE;
+	}
+
+	return 0;
+}
+
+/**
+ *  @brief This function request oob gpio
+ *
+ *  @param card    a pointer to sdio_mmc_card
+ *  @param oob_gpio  oob gpio
+ *  @return         0-success else failure
+ */
+static int woal_request_gpio(sdio_mmc_card *card, t_u8 oob_gpio)
+{
+#if defined(IMX_SUPPORT)
+	struct device_node *node;
+	node = of_find_compatible_node(NULL, NULL, "nxp,wifi-oob-int");
+	if (!node)
+		return -1;
+	card->oob_irq = irq_of_parse_and_map(node, 0);
+	PRINTM(MMSG, "SDIO OOB IRQ: %d", card->oob_irq);
+	return 0;
+#else
+	return -1;
+#endif
+}
+#endif
 
 /**  @brief This function updates the card types
  *
@@ -494,11 +746,11 @@ static t_u16 woal_update_card_type(t_void *card)
 				(strlen(INTF_CARDTYPE) + strlen(KERN_VERSION)));
 	}
 #endif
-#ifdef SDIW615
-	if (cardp_sd->func->device == SD_DEVICE_ID_IW615) {
-		card_type = CARD_TYPE_SDIW615;
-		moal_memcpy_ext(NULL, driver_version, CARD_SDIW615,
-				strlen(CARD_SDIW615), strlen(driver_version));
+#ifdef SDIW610
+	if (cardp_sd->func->device == SD_DEVICE_ID_IW610) {
+		card_type = CARD_TYPE_SDIW610;
+		moal_memcpy_ext(NULL, driver_version, CARD_SDIW610,
+				strlen(CARD_SDIW610), strlen(driver_version));
 		moal_memcpy_ext(
 			NULL,
 			driver_version + strlen(INTF_CARDTYPE) +
@@ -625,7 +877,9 @@ void woal_sdio_remove(struct sdio_func *func)
 
 				/* check if woal_sdio_interrupt() is running */
 				while (card->handle->main_state !=
-				       MOAL_END_MAIN_PROCESS)
+					       MOAL_END_MAIN_PROCESS &&
+				       card->handle->main_state !=
+					       MOAL_STATE_IDLE)
 					woal_sched_timeout(2); /* wait until
 								  woal_sdio_interrupt
 								  ends */
@@ -825,9 +1079,7 @@ int woal_sdio_suspend(struct device *dev)
 #ifdef MMC_PM_FUNC_SUSPENDED
 		handle->suspend_notify_req = MTRUE;
 #endif
-		/* add delay to wait kernel complete cfg80211_disconnect*/
 		woal_sched_timeout(200);
-
 		hs_actived = woal_enable_hs(
 			woal_get_priv(handle, MLAN_BSS_ROLE_ANY));
 #ifdef MMC_PM_FUNC_SUSPENDED
@@ -943,6 +1195,7 @@ static mlan_status woal_sdiommc_write_reg(moal_handle *handle, t_u32 reg,
 	sdio_writeb(((sdio_mmc_card *)handle->card)->func, (t_u8)data, reg,
 		    (int *)&ret);
 	sdio_release_host(((sdio_mmc_card *)handle->card)->func);
+	PRINTM(MREG, "sdio w %x = %x (%x)\n", reg, data, ret);
 	return ret;
 }
 
@@ -965,6 +1218,7 @@ static mlan_status woal_sdiommc_read_reg(moal_handle *handle, t_u32 reg,
 			 (int *)&ret);
 	sdio_release_host(((sdio_mmc_card *)handle->card)->func);
 	*data = val;
+	PRINTM(MREG, "sdio r %x = %x (%x)\n", reg, *data, ret);
 
 	return ret;
 }
@@ -985,6 +1239,7 @@ static mlan_status woal_sdio_writeb(moal_handle *handle, t_u32 reg, t_u8 data)
 	sdio_writeb(((sdio_mmc_card *)handle->card)->func, (t_u8)data, reg,
 		    (int *)&ret);
 	sdio_release_host(((sdio_mmc_card *)handle->card)->func);
+	PRINTM(MREG, "sdio w %x = %x (%x)\n", reg, data, ret);
 	return ret;
 }
 
@@ -1006,6 +1261,7 @@ static mlan_status woal_sdio_readb(moal_handle *handle, t_u32 reg, t_u8 *data)
 			 (int *)&ret);
 	sdio_release_host(((sdio_mmc_card *)handle->card)->func);
 	*data = val;
+	PRINTM(MREG, "sdio r %x = %x (%x)\n", reg, *data, ret);
 
 	return ret;
 }
@@ -1029,6 +1285,7 @@ static mlan_status woal_sdio_f0_readb(moal_handle *handle, t_u32 reg,
 			    (int *)&ret);
 	sdio_release_host(((sdio_mmc_card *)handle->card)->func);
 	*data = val;
+	PRINTM(MREG, "sdio f0 r %x = %x (%x)\n", reg, *data, ret);
 
 	return ret;
 }
@@ -1232,6 +1489,11 @@ mlan_status woal_sdiommc_bus_register(void)
 		return MLAN_STATUS_FAILURE;
 	}
 
+	/* init GPIO PORT for wakeup purpose */
+	GPIO_PORT_INIT();
+	/* set default value */
+	GPIO_PORT_TO_HIGH();
+
 	LEAVE();
 	return ret;
 }
@@ -1267,7 +1529,12 @@ static void woal_sdiommc_unregister_dev(moal_handle *handle)
 #endif
 		/* Release the SDIO IRQ */
 		sdio_claim_host(card->func);
-		sdio_release_irq(card->func);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
+		if (moal_extflg_isset(handle, EXT_INTMODE))
+			woal_sdio_release_irq(card);
+		else
+#endif
+			sdio_release_irq(card->func);
 		sdio_disable_func(card->func);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)
 		if (handle->driver_status)
@@ -1281,6 +1548,7 @@ static void woal_sdiommc_unregister_dev(moal_handle *handle)
 
 		sdio_set_drvdata(card->func, NULL);
 
+		GPIO_PORT_TO_LOW();
 		PRINTM(MWARN, "Making the sdio dev card as NULL\n");
 		card->handle = NULL;
 	}
@@ -1302,12 +1570,26 @@ static mlan_status woal_sdiommc_register_dev(moal_handle *handle)
 
 	ENTER();
 
+	GPIO_PORT_INIT();
+	GPIO_PORT_TO_HIGH();
+
 	/* save adapter pointer in card */
 	card->handle = handle;
 	func = card->func;
 	sdio_claim_host(func);
+
 	/* Request the SDIO IRQ */
-	ret = sdio_claim_irq(func, woal_sdio_interrupt);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
+	if (moal_extflg_isset(handle, EXT_INTMODE)) {
+		ret = woal_request_gpio(card, card->handle->params.gpiopin);
+		if (ret) {
+			PRINTM(MERROR, "Fail to request gpio\n");
+			goto release_host;
+		}
+		ret = woal_sdio_claim_irq(card, woal_sdio_interrupt);
+	} else
+#endif
+		ret = sdio_claim_irq(func, woal_sdio_interrupt);
 	if (ret) {
 		PRINTM(MFATAL, "sdio_claim_irq failed: ret=%d\n", ret);
 		goto release_host;
@@ -1329,7 +1611,12 @@ static mlan_status woal_sdiommc_register_dev(moal_handle *handle)
 	return MLAN_STATUS_SUCCESS;
 
 release_irq:
-	sdio_release_irq(func);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
+	if (moal_extflg_isset(handle, EXT_INTMODE))
+		woal_sdio_release_irq(card);
+	else
+#endif
+		sdio_release_irq(func);
 release_host:
 	sdio_release_host(func);
 	handle->card = NULL;
@@ -1496,7 +1783,7 @@ static mlan_status woal_sdiommc_get_fw_name(moal_handle *handle)
 
 #if defined(SD8987) || defined(SD8997) || defined(SD9098) ||                   \
 	defined(SD9097) || defined(SDIW624) || defined(SDAW693) ||             \
-	defined(SD8978) || defined(SD9177) || defined(SDIW615)
+	defined(SD8978) || defined(SD9177) || defined(SDIW610)
 	t_u32 magic_reg = handle->card_info->magic_reg;
 	t_u32 magic = 0;
 	t_u32 host_strap_reg = handle->card_info->host_strap_reg;
@@ -1517,7 +1804,7 @@ static mlan_status woal_sdiommc_get_fw_name(moal_handle *handle)
 
 #if defined(SD8987) || defined(SD8997) || defined(SD9098) ||                   \
 	defined(SD9097) || defined(SDIW624) || defined(SDAW693) ||             \
-	defined(SD8978) || defined(SD9177) || defined(SDIW615)
+	defined(SD8978) || defined(SD9177) || defined(SDIW610)
 	/** Revision ID register */
 	woal_sdiommc_read_reg(handle, magic_reg, &magic);
 	/** Revision ID register */
@@ -1684,7 +1971,12 @@ static mlan_status woal_sdiommc_get_fw_name(moal_handle *handle)
 #endif
 #ifdef SDAW693
 	if (IS_SDAW693(handle->card_type)) {
-		if (magic == CHIP_MAGIC_VALUE) {
+		magic &= 0x03;
+		if (magic == 0x03)
+			PRINTM(MMSG, "wlan: SDAW693 in secure-boot mode\n");
+
+		switch (revision_id) {
+		case SDAW693_A0:
 			if (strap == CARD_TYPE_SD_UART)
 				strncpy(handle->card_info->fw_name,
 					SDUARTAW693_COMBO_FW_NAME,
@@ -1693,6 +1985,36 @@ static mlan_status woal_sdiommc_get_fw_name(moal_handle *handle)
 				strncpy(handle->card_info->fw_name,
 					SDSDAW693_COMBO_FW_NAME,
 					FW_NAMW_MAX_LEN);
+			strncpy(handle->card_info->fw_name_wlan,
+				SDAW693_DEFAULT_WLAN_FW_NAME, FW_NAMW_MAX_LEN);
+			break;
+		case SDAW693_A1:
+			if (strap == CARD_TYPE_SD_UART)
+				strncpy(handle->card_info->fw_name,
+					SDUARTAW693_COMBO_V1_FW_NAME,
+					FW_NAMW_MAX_LEN);
+			else
+				strncpy(handle->card_info->fw_name,
+					SDSDAW693_COMBO_V1_FW_NAME,
+					FW_NAMW_MAX_LEN);
+			strncpy(handle->card_info->fw_name_wlan,
+				SDAW693_WLAN_V1_FW_NAME, FW_NAMW_MAX_LEN);
+			if (magic != 0x03) {
+				/* remove extension .se */
+				if (strstr(handle->card_info->fw_name, ".se"))
+					memset(strstr(handle->card_info->fw_name,
+						      ".se"),
+					       '\0', sizeof(".se"));
+				if (strstr(handle->card_info->fw_name_wlan,
+					   ".se"))
+					memset(strstr(handle->card_info
+							      ->fw_name_wlan,
+						      ".se"),
+					       '\0', sizeof(".se"));
+			}
+			break;
+		default:
+			break;
 		}
 	}
 #endif
@@ -1785,15 +2107,33 @@ static mlan_status woal_sdiommc_get_fw_name(moal_handle *handle)
 	}
 #endif
 
-#ifdef SDIW615
-	if (IS_SDIW615(handle->card_type)) {
-		if (magic == CHIP_MAGIC_VALUE) {
-			if (strap == CARD_TYPE_SD_UART)
-				strcpy(handle->card_info->fw_name,
-				       SDUARTIW615_COMBO_FW_NAME);
+#ifdef SDIW610
+	if (IS_SDIW610(handle->card_type)) {
+		magic &= 0x03;
+		if (magic == 0x03)
+			PRINTM(MMSG, "wlan: SDIW610 in secure-boot mode\n");
+		if (strap == CARD_TYPE_SDIW610_UART) {
+			if (handle->params.dual_nb)
+				strncpy(handle->card_info->fw_name,
+					SDUARTSPIIW610_COMBO_FW_NAME,
+					FW_NAMW_MAX_LEN);
 			else
-				strcpy(handle->card_info->fw_name,
-				       SDSDIW615_COMBO_FW_NAME);
+				strncpy(handle->card_info->fw_name,
+					SDUARTIW610_COMBO_FW_NAME,
+					FW_NAMW_MAX_LEN);
+		}
+		strncpy(handle->card_info->fw_name_wlan,
+			SDIW610_DEFAULT_WLAN_FW_NAME, FW_NAMW_MAX_LEN);
+		if (magic != 0x03) {
+			/* remove extension .se */
+			if (strstr(handle->card_info->fw_name, ".se"))
+				memset(strstr(handle->card_info->fw_name,
+					      ".se"),
+				       '\0', sizeof(".se"));
+			if (strstr(handle->card_info->fw_name_wlan, ".se"))
+				memset(strstr(handle->card_info->fw_name_wlan,
+					      ".se"),
+				       '\0', sizeof(".se"));
 		}
 	}
 #endif
@@ -2915,7 +3255,12 @@ void woal_sdio_reset_hw(moal_handle *handle)
 	struct sdio_func *func = card->func;
 	ENTER();
 	sdio_claim_host(func);
-	sdio_release_irq(card->func);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
+	if (moal_extflg_isset(handle, EXT_INTMODE))
+		woal_sdio_release_irq(card);
+	else
+#endif
+		sdio_release_irq(card->func);
 	sdio_disable_func(card->func);
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 2, 0)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
@@ -2941,7 +3286,12 @@ void woal_sdio_reset_hw(moal_handle *handle)
 		func->enable_timeout = 200;
 #endif
 	sdio_enable_func(func);
-	sdio_claim_irq(func, woal_sdio_interrupt);
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
+	if (moal_extflg_isset(handle, EXT_INTMODE))
+		woal_sdio_claim_irq(card, woal_sdio_interrupt);
+	else
+#endif
+		sdio_claim_irq(func, woal_sdio_interrupt);
 	sdio_set_block_size(card->func, MLAN_SDIO_BLOCK_SIZE);
 	sdio_release_host(func);
 	LEAVE();
@@ -2972,7 +3322,7 @@ static int woal_sdiommc_reset_fw(moal_handle *handle)
 		ret = -EFAULT;
 		goto done;
 	}
-
+	udelay(4000);
 	/** wait SOC fully wake up */
 	for (tries = 0; tries < MAX_POLL_TRIES; ++tries) {
 		ret = handle->ops.write_reg(handle, reset_reg, 0xba);
@@ -2993,10 +3343,10 @@ static int woal_sdiommc_reset_fw(moal_handle *handle)
 		goto done;
 	}
 #if defined(SD9098) || defined(SD9097) || defined(SDIW624) ||                  \
-	defined(SDAW693) || defined(SD9177) || defined(SDIW615)
+	defined(SDAW693) || defined(SD9177) || defined(SDIW610)
 	if (IS_SD9098(handle->card_type) || IS_SD9097(handle->card_type) ||
 	    IS_SDIW624(handle->card_type) || IS_SD9177(handle->card_type) ||
-	    IS_SDIW615(handle->card_type) || IS_SDAW693(handle->card_type))
+	    IS_SDIW610(handle->card_type) || IS_SDAW693(handle->card_type))
 		handle->ops.write_reg(handle, 0x00, 0x10);
 #endif
 	/* Poll register around 100 ms */
@@ -3057,6 +3407,12 @@ static mlan_status woal_do_sdiommc_flr(moal_handle *handle, bool prepare,
 
 	if (!prepare)
 		goto perform_init;
+
+	if (!(handle->pmlan_adapter)) {
+		PRINTM(MINFO, "\n Handle null 2 during prepare=%d\n", prepare);
+		LEAVE();
+		return status;
+	}
 
 	/* Reset all interfaces */
 	priv = woal_get_priv(handle, MLAN_BSS_ROLE_ANY);

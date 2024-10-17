@@ -77,6 +77,8 @@ static const struct iw_priv_args woal_private_args[] = {
 	{WOAL_TXBUF_CFG, IW_PRIV_TYPE_INT | 1, IW_PRIV_TYPE_INT | 1,
 	 "txbufcfg"},
 	{WOAL_SLEEP_PD, IW_PRIV_TYPE_INT | 1, IW_PRIV_TYPE_INT | 1, "sleeppd"},
+	{WOAL_FW_WAKEUP_METHOD, IW_PRIV_TYPE_INT | 1, IW_PRIV_TYPE_INT | 1,
+	 "fwwakeupmethod"},
 	{WOAL_AUTH_TYPE, IW_PRIV_TYPE_INT | 1, IW_PRIV_TYPE_INT | 1,
 	 "authtype"},
 	{WOAL_PORT_CTRL, IW_PRIV_TYPE_INT | 1, IW_PRIV_TYPE_INT | 1,
@@ -2777,8 +2779,7 @@ static int woal_set_essid(struct net_device *dev, struct iw_request_info *info,
 					       0);
 				ret = MLAN_STATUS_SUCCESS;
 
-				LEAVE();
-				return ret;
+				goto setessid_ret;
 			}
 		}
 #endif

@@ -209,5 +209,9 @@ ENUM_ELEMENT(EVENT_DUMMY_HOST_WAKEUP_SIGNAL, 0x0001),
 	/** Event ID: Bulk Tx status */
 	ENUM_ELEMENT(EVENT_TX_STATUS_BULK_REPORT, 0x00A2),
 
+	/** Event ID: peer's power save mode change */
+	ENUM_ELEMENT(EVENT_PEER_PS_MODE_CHANGE, 0x00A3),
+
+	ENUM_ELEMENT(EVENT_CHAN_SWITCH_TO_6G_BLOCK, 0x00A4),
 	/* Always keep this last */
 	ENUM_ELEMENT_LAST(__HostEvent_Last)

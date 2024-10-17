@@ -126,6 +126,8 @@ ENUM_ELEMENT(HostCmd_CMD_GET_HW_SPEC, 0x0003),
 	/** Host Command ID : 802.11 get status */
 	ENUM_ELEMENT(HostCmd_CMD_WMM_GET_STATUS, 0x0071),
 
+	/** Host Command ID : 802.11 firmware wakeup method */
+	ENUM_ELEMENT(HostCmd_CMD_802_11_FW_WAKE_METHOD, 0x0074),
 	/** Host Command ID : 802.11 subscribe event */
 	ENUM_ELEMENT(HostCmd_CMD_802_11_SUBSCRIBE_EVENT, 0x0075),
 
@@ -261,6 +263,8 @@ ENUM_ELEMENT(HostCmd_CMD_GET_HW_SPEC, 0x0003),
 
 	/** Host Command ID: CROSS CHIP SYNCH */
 	ENUM_ELEMENT(HostCmd_CMD_CROSS_CHIP_SYNCH, 0x027d),
+
+	ENUM_ELEMENT(HostCmd_CMD_TSP_CFG, 0x0280),
 
 	/** Host Command ID : TDLS configuration */
 	ENUM_ELEMENT(HostCmd_CMD_TDLS_CONFIG, 0x0100),
@@ -457,10 +461,21 @@ ENUM_ELEMENT(HostCmd_CMD_GET_HW_SPEC, 0x0003),
 	/** Host Command ID: PCIE ADMA INIT */
 	ENUM_ELEMENT(HostCmd_CMD_PCIE_ADMA_INIT, 0x0284),
 
+	/** Host Command ID: query of current TX rate to the peer */
+	ENUM_ELEMENT(HostCmd_CMD_PEER_TX_RATE_QUERY, 0x0285),
+
+	/** Host Command ID: multi-client TX scheduling configuration */
+	ENUM_ELEMENT(HostCmd_CMD_MCLIENT_SCHEDULE_CFG, 0x0286),
+
 	/** Host Command ID : WMM HOST ADDTS req */
 	ENUM_ELEMENT(HostCmd_CMD_WMM_HOST_ADDTS_REQ, 0x0287),
 	/** Host Command ID : WMM HOST DELTS req */
 	ENUM_ELEMENT(HostCmd_CMD_WMM_HOST_DELTS_REQ, 0x0288),
 
+	/** Host Command ID : Auth, Assoc timeout configuration */
+	ENUM_ELEMENT(HostCmd_CMD_AUTH_ASSOC_TIMEOUT_CFG, 0x0289),
+
+	/** Host Command ID : HS Event masking configuration */
+	ENUM_ELEMENT(HostCmd_CMD_HS_EVENT_MASK, 0x028a),
 	/* Always keep this last */
 	ENUM_ELEMENT_LAST(__HostCmd_CMD_Last)

@@ -83,6 +83,7 @@ static country_code_mapping_t country_code_mapping[] = {
 	{"KR", 0x30, 0x30}, /* Republic Of Korea */
 	{"JP", 0xFF, 0x40}, /* Japan       */
 	{"CN", 0x30, 0x50}, /* China       */
+	{"TW", 0x30, 0x30}, /* TW support  */
 	{"BR", 0x01, 0x09}, /* Brazil      */
 	{"RU", 0x30, 0x0f}, /* Russia      */
 	{"IN", 0x10, 0x06}, /* India       */
@@ -3232,8 +3233,9 @@ static void wlan_sort_cfp_otp_table(mlan_adapter *pmadapter)
  */
 static void wlan_set_otp_cfp_max_tx_pwr(mlan_adapter *pmadapter, t_bool is6g)
 {
-	t_u8 i, j;
+	t_u8 i, j, k, n;
 	t_u8 rows, cols, max = 0;
+	t_u8 bonded_chan_count = 0;
 
 	if (!pmadapter->otp_region)
 		return;
@@ -3243,20 +3245,49 @@ static void wlan_set_otp_cfp_max_tx_pwr(mlan_adapter *pmadapter, t_bool is6g)
 		cols = pmadapter->tx_power_table_bg_cols;
 		if (pmadapter->tx_power_table_bg_size < (rows * cols))
 			goto table_a;
+		max = 0;
 		for (i = 0; i < rows; i++) {
-			max = 0;
 			if ((pmadapter->cfp_otp_bg + i)->dynamic.flags &
 			    NXP_CHANNEL_DISABLED)
 				continue;
-			/* get the max value among all mod group for this
-			 * channel */
-			for (j = 1; j < cols; j++)
+
+			/* Get the max value among all mod groups for this chan
+			 */
+			for (j = 1; j < cols; j++) {
 				max = MAX(
 					max,
 					pmadapter->tx_power_table_bg[i * cols +
 								     j]);
+			}
 
-			(pmadapter->cfp_otp_bg + i)->max_tx_power = max;
+			bonded_chan_count++;
+			/* As the BG band allows overlapping 40MHz
+			 * bonded groups, keep comparing the max value
+			 * with the next consecutive 40Mhz channel, if
+			 * all of below 4 cases are true:
+			 *   1. this is not the last row
+			 *   2. this channel suports 40 MHz
+			 *   3. the next channel also supports 40MHz
+			 *   4. the next channel is not disabled
+			 */
+			if ((i < (rows - 1)) &&
+			    (!((pmadapter->cfp_otp_bg + i)->dynamic.flags &
+			       NXP_CHANNEL_NOHT40)) &&
+			    (!((pmadapter->cfp_otp_bg + i + 1)->dynamic.flags &
+			       NXP_CHANNEL_NOHT40)) &&
+			    (!((pmadapter->cfp_otp_bg + i + 1)->dynamic.flags &
+			       NXP_CHANNEL_DISABLED))) {
+				continue;
+			}
+			/* Apply the max power value to all channels in this
+			 * bonded group
+			 */
+			for (k = 0; k < bonded_chan_count; k++) {
+				(pmadapter->cfp_otp_bg + i - k)->max_tx_power =
+					max;
+			}
+			max = 0;
+			bonded_chan_count = 0;
 		}
 	}
 table_a:
@@ -3265,19 +3296,62 @@ table_a:
 		cols = pmadapter->tx_power_table_a_cols;
 		if (pmadapter->tx_power_table_a_size < (rows * cols))
 			return;
+		max = 0;
+		bonded_chan_count = 0;
 		for (i = 0; i < rows; i++) {
-			max = 0;
 			if ((pmadapter->cfp_otp_a + i)->dynamic.flags &
 			    NXP_CHANNEL_DISABLED)
 				continue;
-			/* get the max value among all mod group for this
-			 * channel */
+
+			/* The 5G cfp table is sorted based on the channel num
+			 * and may contain 4G and 5.9G channels. As the cfp
+			 * table index may not match the 5G powertable channel
+			 * index, get the corresponding channel row from
+			 * powertable
+			 */
+			n = 0;
+			while (n < pmadapter->tx_power_table_a_rows) {
+				if (pmadapter->tx_power_table_a[n * cols] ==
+				    (pmadapter->cfp_otp_a + i)->channel)
+					break;
+				n++;
+			}
+			/* Get the max value among all mod groups for this chan
+			 */
 			for (j = 1; j < cols; j++)
 				max = MAX(max,
-					  pmadapter->tx_power_table_a[i * cols +
+					  pmadapter->tx_power_table_a[n * cols +
 								      j]);
 
-			(pmadapter->cfp_otp_a + i)->max_tx_power = max;
+			bonded_chan_count++;
+
+			if ((i < (rows - 1)) &&
+			    !((pmadapter->cfp_otp_a + i + 1)->dynamic.flags &
+			      NXP_CHANNEL_DISABLED)) {
+				/* Compare the max power value with the next
+				 * chan in this bonded group, unless this is the
+				 * last or the next one is disabled
+				 */
+				if (!((pmadapter->cfp_otp_a + i)->dynamic.flags &
+				      NXP_CHANNEL_NOHT80)) {
+					if (bonded_chan_count < 4)
+						continue;
+				} else if (!((pmadapter->cfp_otp_a + i)
+						     ->dynamic.flags &
+					     NXP_CHANNEL_NOHT40)) {
+					if (bonded_chan_count < 2)
+						continue;
+				}
+			}
+
+			/* Apply the max power value to all channels in this
+			 * bonded group
+			 */
+			for (k = 0; k < bonded_chan_count; k++)
+				(pmadapter->cfp_otp_a + i - k)->max_tx_power =
+					max;
+			max = 0;
+			bonded_chan_count = 0;
 		}
 	}
 }
@@ -3375,12 +3449,15 @@ void wlan_add_fw_cfp_tables(pmlan_private pmpriv, t_u8 *buf, t_u16 buf_left)
 					break;
 				}
 			}
-			for (i = 0; i < MLAN_CFP_TABLE_SIZE_A; i++) {
-				if (cfp_table_A[i].code ==
-				    pmadapter->otp_region->region_code) {
-					max_tx_pwr_a = (cfp_table_A[i].cfp)
-							       ->max_tx_power;
-					break;
+			if (pmadapter->fw_bands & BAND_A) {
+				for (i = 0; i < MLAN_CFP_TABLE_SIZE_A; i++) {
+					if (cfp_table_A[i].code ==
+					    pmadapter->otp_region->region_code) {
+						max_tx_pwr_a =
+							(cfp_table_A[i].cfp)
+								->max_tx_power;
+						break;
+					}
 				}
 			}
 			PRINTM(MCMND,
@@ -3481,6 +3558,12 @@ void wlan_add_fw_cfp_tables(pmlan_private pmpriv, t_u8 *buf, t_u16 buf_left)
 					       ->dynamic.flags);
 				data++;
 			}
+			if (!(pmadapter->fw_bands & BAND_A)) {
+				pmadapter->tx_power_table_a_rows = 0;
+				pmadapter->tx_power_table_a_cols = 0;
+				break;
+			}
+
 			ret = pcb->moal_malloc(
 				pmadapter->pmoal_handle,
 				pmadapter->tx_power_table_a_rows *
@@ -3564,6 +3647,12 @@ void wlan_add_fw_cfp_tables(pmlan_private pmpriv, t_u8 *buf, t_u16 buf_left)
 				   data, i, i);
 			pmadapter->tx_power_table_bg_size = i;
 			data += i;
+			if (!(pmadapter->fw_bands & BAND_A)) {
+				pmadapter->tx_power_table_a_rows = 0;
+				pmadapter->tx_power_table_a_cols = 0;
+				break;
+			}
+
 			i = 0;
 			while ((i < pmadapter->tx_power_table_a_rows *
 					    pmadapter->tx_power_table_a_cols) &&
@@ -3592,16 +3681,19 @@ void wlan_add_fw_cfp_tables(pmlan_private pmpriv, t_u8 *buf, t_u16 buf_left)
 				((power_table_attr_t *)data)->rows_2g;
 			pmadapter->tx_power_table_bg_cols =
 				((power_table_attr_t *)data)->cols_2g;
-			pmadapter->tx_power_table_a_rows =
-				((power_table_attr_t *)data)->rows_5g;
-			pmadapter->tx_power_table_a_cols =
-				((power_table_attr_t *)data)->cols_5g;
-			PRINTM(MCMD_D,
-			       "OTP region: bg_row=%d,bg_cols=%d a_row=%d, a_cols=%d\n",
+			PRINTM(MCMD_D, "OTP region: bg_row=%d,bg_cols=%d\n",
 			       pmadapter->tx_power_table_bg_rows,
-			       pmadapter->tx_power_table_bg_cols,
-			       pmadapter->tx_power_table_a_rows,
-			       pmadapter->tx_power_table_a_cols);
+			       pmadapter->tx_power_table_bg_cols);
+			if (pmadapter->fw_bands & BAND_A) {
+				pmadapter->tx_power_table_a_rows =
+					((power_table_attr_t *)data)->rows_5g;
+				pmadapter->tx_power_table_a_cols =
+					((power_table_attr_t *)data)->cols_5g;
+				PRINTM(MCMD_D,
+				       "OTP region: a_row=%d, a_cols=%d\n",
+				       pmadapter->tx_power_table_a_rows,
+				       pmadapter->tx_power_table_a_cols);
+			}
 			break;
 		default:
 			break;
@@ -3611,8 +3703,6 @@ void wlan_add_fw_cfp_tables(pmlan_private pmpriv, t_u8 *buf, t_u16 buf_left)
 	}
 	if (!pmadapter->cfp_otp_bg || !pmadapter->tx_power_table_bg)
 		goto out;
-
-	wlan_set_otp_cfp_max_tx_pwr(pmadapter, MFALSE);
 
 	/* Set remaining flags for BG */
 	rows = pmadapter->tx_power_table_bg_rows;
@@ -3637,6 +3727,7 @@ void wlan_add_fw_cfp_tables(pmlan_private pmpriv, t_u8 *buf, t_u16 buf_left)
 	}
 	if (pmadapter->cfp_otp_a)
 		wlan_sort_cfp_otp_table(pmadapter);
+	wlan_set_otp_cfp_max_tx_pwr(pmadapter, MFALSE);
 out:
 	LEAVE();
 }
@@ -3735,7 +3826,8 @@ mlan_status wlan_get_cfpinfo(pmlan_adapter pmadapter,
 	t_u8 cfp_code_a = pmadapter->region_code;
 	t_u8 cfp_code_bg = pmadapter->region_code;
 	t_u32 len = 0, size = 0;
-	t_u8 *req_buf, *tmp;
+	t_u8 *req_buf;
+	mlan_cfpinfo c = {0};
 	mlan_status ret = MLAN_STATUS_SUCCESS;
 
 	ENTER();
@@ -3755,33 +3847,29 @@ mlan_status wlan_get_cfpinfo(pmlan_adapter pmadapter,
 	/* Calculate the total response size required to return region,
 	 * country codes, cfp tables and power tables
 	 */
-	size = sizeof(pmadapter->country_code) + sizeof(pmadapter->region_code);
-	/* Add size to store region, country and environment codes */
-	size += sizeof(t_u32);
-	if (pmadapter->cfp_code_bg)
-		cfp_code_bg = pmadapter->cfp_code_bg;
-
+	size = sizeof(mlan_cfpinfo);
 	/* Get cfp table and its size corresponding to the region code */
-	cfp_bg = wlan_get_region_cfp_table(pmadapter, cfp_code_bg,
-					   BAND_G | BAND_B, &cfp_no_bg);
-	size += cfp_no_bg * sizeof(chan_freq_power_t);
-	if (pmadapter->cfp_code_a)
-		cfp_code_a = pmadapter->cfp_code_a;
-	cfp_a = wlan_get_region_cfp_table(pmadapter, cfp_code_a, BAND_A,
-					  &cfp_no_a);
-	size += cfp_no_a * sizeof(chan_freq_power_t);
-	if (pmadapter->otp_region)
-		size += sizeof(pmadapter->otp_region->environment);
-
-	/* Get power table size */
-	if (pmadapter->tx_power_table_bg) {
+	if (pmadapter->fw_bands & (BAND_B | BAND_G)) {
+		if (pmadapter->cfp_code_bg)
+			cfp_code_bg = pmadapter->cfp_code_bg;
+		cfp_bg = wlan_get_region_cfp_table(pmadapter, cfp_code_bg,
+						   BAND_G | BAND_B, &cfp_no_bg);
+		size += cfp_no_bg * sizeof(chan_freq_power_t);
+		c.is2g_present = 1;
+		c.rows_2g = cfp_no_bg;
+		c.cols_2g = pmadapter->tx_power_table_bg_cols;
 		size += pmadapter->tx_power_table_bg_size;
-		/* Add size to store table size, rows and cols */
-		size += 3 * sizeof(t_u32);
 	}
-	if (pmadapter->tx_power_table_a) {
+	if (pmadapter->fw_bands & BAND_A) {
+		if (pmadapter->cfp_code_a)
+			cfp_code_a = pmadapter->cfp_code_a;
+		cfp_a = wlan_get_region_cfp_table(pmadapter, cfp_code_a, BAND_A,
+						  &cfp_no_a);
+		size += cfp_no_a * sizeof(chan_freq_power_t);
+		c.is5g_present = 1;
+		c.rows_5g = cfp_no_a;
+		c.cols_5g = pmadapter->tx_power_table_a_cols;
 		size += pmadapter->tx_power_table_a_size;
-		size += 3 * sizeof(t_u32);
 	}
 	/* Check information buffer length of MLAN IOCTL */
 	if (pioctl_req->buf_len < size) {
@@ -3792,90 +3880,52 @@ mlan_status wlan_get_cfpinfo(pmlan_adapter pmadapter,
 		ret = MLAN_STATUS_RESOURCE;
 		goto out;
 	}
-	/* Copy the total size of region code, country code and environment
-	 * in first four bytes of the IOCTL request buffer and then copy
-	 * codes respectively in following bytes
-	 */
+
 	req_buf = (t_u8 *)pioctl_req->pbuf;
-	size = sizeof(pmadapter->country_code) + sizeof(pmadapter->region_code);
+
+	/* Copy the nss, region code, country code and environment */
+	if (IS_STREAM_2X2(pmadapter->feature_control))
+		c.nss = 2;
+	else if (IS_CARDAW693(pmadapter->card_type) && !pmadapter->second_mac)
+		c.nss = 2;
+	else
+		c.nss = 1;
+	c.region_code = (t_u8)pmadapter->region_code;
+	c.country_code[0] = pmadapter->country_code[0];
+	c.country_code[1] = pmadapter->country_code[1];
 	if (pmadapter->otp_region)
-		size += sizeof(pmadapter->otp_region->environment);
-	tmp = (t_u8 *)&size;
-	memcpy_ext(pmadapter, req_buf, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-	memcpy_ext(pmadapter, req_buf + len, &pmadapter->region_code,
-		   sizeof(pmadapter->region_code),
-		   sizeof(pmadapter->region_code));
-	len += sizeof(pmadapter->region_code);
-	memcpy_ext(pmadapter, req_buf + len, &pmadapter->country_code,
-		   sizeof(pmadapter->country_code),
-		   sizeof(pmadapter->country_code));
-	len += sizeof(pmadapter->country_code);
-	if (pmadapter->otp_region) {
-		memcpy_ext(pmadapter, req_buf + len,
-			   &pmadapter->otp_region->environment,
-			   sizeof(pmadapter->otp_region->environment),
-			   sizeof(pmadapter->otp_region->environment));
-		len += sizeof(pmadapter->otp_region->environment);
+		c.environment = pmadapter->otp_region->environment;
+	/* copy the mlan_cfpinfo struct at the start of req_buf */
+	memcpy_ext(pmadapter, req_buf, &c, sizeof(mlan_cfpinfo),
+		   sizeof(mlan_cfpinfo));
+	len += sizeof(mlan_cfpinfo);
+
+	/* copy cfp tables */
+	if (cfp_bg) {
+		size = cfp_no_bg * sizeof(chan_freq_power_t);
+		memcpy_ext(pmadapter, req_buf + len, cfp_bg, size, size);
+		len += size;
 	}
-	/* copy the cfp table size followed by the entire table */
-	if (!cfp_bg)
-		goto out;
-	size = cfp_no_bg * sizeof(chan_freq_power_t);
-	memcpy_ext(pmadapter, req_buf + len, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-	memcpy_ext(pmadapter, req_buf + len, cfp_bg, size, size);
-	len += size;
-	if (!cfp_a)
-		goto out;
-	size = cfp_no_a * sizeof(chan_freq_power_t);
-	memcpy_ext(pmadapter, req_buf + len, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-	memcpy_ext(pmadapter, req_buf + len, cfp_a, size, size);
-	len += size;
-	/* Copy the size of the power table, number of rows, number of cols
-	 * and the entire power table
-	 */
-	if (!pmadapter->tx_power_table_bg)
-		goto out;
-	size = pmadapter->tx_power_table_bg_size;
-	memcpy_ext(pmadapter, req_buf + len, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-
-	/* No. of rows */
-	size = pmadapter->tx_power_table_bg_rows;
-	memcpy_ext(pmadapter, req_buf + len, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-
-	/* No. of cols */
-	size = pmadapter->tx_power_table_bg_size /
-	       pmadapter->tx_power_table_bg_rows;
-	memcpy_ext(pmadapter, req_buf + len, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-	memcpy_ext(pmadapter, req_buf + len, pmadapter->tx_power_table_bg,
-		   pmadapter->tx_power_table_bg_size,
-		   pmadapter->tx_power_table_bg_size);
-	len += pmadapter->tx_power_table_bg_size;
-	if (!pmadapter->tx_power_table_a)
-		goto out;
-	size = pmadapter->tx_power_table_a_size;
-	memcpy_ext(pmadapter, req_buf + len, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-
-	/* No. of rows */
-	size = pmadapter->tx_power_table_a_rows;
-	memcpy_ext(pmadapter, req_buf + len, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-
-	/* No. of cols */
-	size = pmadapter->tx_power_table_a_size /
-	       pmadapter->tx_power_table_a_rows;
-	memcpy_ext(pmadapter, req_buf + len, tmp, sizeof(size), sizeof(size));
-	len += sizeof(size);
-	memcpy_ext(pmadapter, req_buf + len, pmadapter->tx_power_table_a,
-		   pmadapter->tx_power_table_a_size,
-		   pmadapter->tx_power_table_a_size);
-	len += pmadapter->tx_power_table_a_size;
+	if (cfp_a) {
+		size = cfp_no_a * sizeof(chan_freq_power_t);
+		memcpy_ext(pmadapter, req_buf + len, cfp_a, size, size);
+		len += size;
+	}
+	/* copy power tables */
+	if (pmadapter->tx_power_table_bg) {
+		memcpy_ext(pmadapter, req_buf + len,
+			   pmadapter->tx_power_table_bg,
+			   pmadapter->tx_power_table_bg_size,
+			   pmadapter->tx_power_table_bg_size);
+		len += pmadapter->tx_power_table_bg_size;
+	}
+	if (pmadapter->tx_power_table_a) {
+		memcpy_ext(pmadapter, req_buf + len,
+			   pmadapter->tx_power_table_a,
+			   pmadapter->tx_power_table_a_size,
+			   pmadapter->tx_power_table_a_size);
+		len += pmadapter->tx_power_table_a_size;
+	}
 out:
 	if (pioctl_req)
 		pioctl_req->data_read_written = len;

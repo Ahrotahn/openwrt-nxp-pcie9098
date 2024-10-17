@@ -776,6 +776,8 @@ t_void wlan_init_adapter(pmlan_adapter pmadapter)
 	pmadapter->local_listen_interval = 0; /* default value in firmware will
 						 be used */
 #endif /* STA_SUPPORT */
+	pmadapter->fw_wakeup_method = WAKEUP_FW_UNCHANGED;
+	pmadapter->fw_wakeup_gpio_pin = DEF_WAKEUP_FW_GPIO;
 
 	pmadapter->is_deep_sleep = MFALSE;
 	pmadapter->idle_time = DEEP_SLEEP_IDLE_TIME;
@@ -1039,6 +1041,28 @@ mlan_status wlan_init_priv_lock_list(pmlan_adapter pmadapter, t_u8 start_index)
 					priv->adapter->callbacks.moal_init_lock);
 			}
 			util_init_list_head(
+				pmadapter->pmoal_handle, &priv->wmm.all_stas,
+				MTRUE, pmadapter->callbacks.moal_init_lock);
+			util_init_list_head(
+				pmadapter->pmoal_handle,
+				&priv->wmm.pending_stas, MTRUE,
+				pmadapter->callbacks.moal_init_lock);
+			util_init_list_head(
+				pmadapter->pmoal_handle,
+				&priv->wmm.active_stas.list, MTRUE,
+				pmadapter->callbacks.moal_init_lock);
+			for (j = 0; j < NELEMENTS(priv->wmm.pending_txq); ++j) {
+				util_init_list_head(
+					pmadapter->pmoal_handle,
+					&priv->wmm.pending_txq[j], MTRUE,
+					pmadapter->callbacks.moal_init_lock);
+			}
+			priv->wmm.selected_ra_list = MNULL;
+			pcb->moal_get_host_time_ns(
+				&priv->wmm.active_stas.next_update);
+			pcb->moal_get_host_time_ns(&priv->wmm.next_rate_update);
+			priv->wmm.is_rate_update_pending = MFALSE;
+			util_init_list_head(
 				(t_void *)pmadapter->pmoal_handle,
 				&priv->tx_ba_stream_tbl_ptr, MTRUE,
 				pmadapter->callbacks.moal_init_lock);
@@ -1156,6 +1180,16 @@ mlan_status wlan_init_lock_list(pmlan_adapter pmadapter)
 		goto error;
 	}
 #endif
+#ifdef USB
+	if (IS_USB(pmadapter->card_type)) {
+		if (pcb->moal_init_lock(pmadapter->pmoal_handle,
+					&pmadapter->pmlan_usb_event_lock) !=
+		    MLAN_STATUS_SUCCESS) {
+			ret = MLAN_STATUS_FAILURE;
+			goto error;
+		}
+	}
+#endif
 #if defined(USB)
 	if (IS_USB(pmadapter->card_type)) {
 		for (i = 0; i < MAX_USB_TX_PORT_NUM; i++) {
@@ -1258,6 +1292,11 @@ t_void wlan_free_lock_list(pmlan_adapter pmadapter)
 		pcb->moal_free_lock(pmadapter->pmoal_handle,
 				    pmadapter->pmlan_pcie_lock);
 #endif
+#ifdef USB
+	if (IS_USB(pmadapter->card_type) && pmadapter->pmlan_usb_event_lock)
+		pcb->moal_free_lock(pmadapter->pmoal_handle,
+				    pmadapter->pmlan_usb_event_lock);
+#endif
 #if defined(USB)
 	if (IS_USB(pmadapter->card_type)) {
 		for (i = 0; i < MAX_USB_TX_PORT_NUM; i++) {
@@ -1343,6 +1382,24 @@ t_void wlan_free_lock_list(pmlan_adapter pmadapter)
 					(t_void *)priv->adapter->pmoal_handle,
 					&priv->wmm.tid_tbl_ptr[j].ra_list,
 					priv->adapter->callbacks.moal_free_lock);
+			util_free_list_head(
+				(t_void *)priv->adapter->pmoal_handle,
+				&priv->wmm.all_stas,
+				priv->adapter->callbacks.moal_free_lock);
+			util_free_list_head(
+				(t_void *)priv->adapter->pmoal_handle,
+				&priv->wmm.pending_stas,
+				priv->adapter->callbacks.moal_free_lock);
+			util_free_list_head(
+				(t_void *)priv->adapter->pmoal_handle,
+				&priv->wmm.active_stas.list,
+				priv->adapter->callbacks.moal_free_lock);
+			for (j = 0; j < NELEMENTS(priv->wmm.pending_txq); ++j) {
+				util_free_list_head(
+					(t_void *)priv->adapter->pmoal_handle,
+					&priv->wmm.pending_txq[j],
+					priv->adapter->callbacks.moal_free_lock);
+			}
 			util_free_list_head(
 				(t_void *)priv->adapter->pmoal_handle,
 				&priv->tx_ba_stream_tbl_ptr,
@@ -1597,7 +1654,7 @@ static void wlan_update_hw_spec(pmlan_adapter pmadapter)
 			pmadapter->fw_bands |= BAND_GAX;
 			pmadapter->config_bands |= BAND_GAX;
 		}
-		if (pmadapter->hw_hecap_len) {
+		if ((pmadapter->fw_bands & BAND_A) && pmadapter->hw_hecap_len) {
 			pmadapter->fw_bands |= BAND_AAX;
 			pmadapter->config_bands |= BAND_AAX;
 		}
@@ -1741,6 +1798,14 @@ t_void wlan_free_adapter(pmlan_adapter pmadapter)
 		return;
 	}
 
+#ifdef PCIE
+	if (IS_PCIE(pmadapter->card_type)) {
+		/* Free ssu dma buffer just in case  */
+		wlan_free_ssu_pcie_buf(pmadapter);
+		/* Free PCIE ring buffers */
+		wlan_free_pcie_ring_buf(pmadapter);
+	}
+#endif
 	wlan_cancel_all_pending_cmd(pmadapter, MTRUE);
 	/* Free command buffer */
 	PRINTM(MINFO, "Free Command buffer\n");
@@ -1843,15 +1908,6 @@ t_void wlan_free_adapter(pmlan_adapter pmadapter)
 
 	wlan_free_mlan_buffer(pmadapter, pmadapter->psleep_cfm);
 	pmadapter->psleep_cfm = MNULL;
-
-#ifdef PCIE
-	if (IS_PCIE(pmadapter->card_type)) {
-		/* Free ssu dma buffer just in case  */
-		wlan_free_ssu_pcie_buf(pmadapter);
-		/* Free PCIE ring buffers */
-		wlan_free_pcie_ring_buf(pmadapter);
-	}
-#endif
 
 	/* Free timers */
 	wlan_free_timer(pmadapter);

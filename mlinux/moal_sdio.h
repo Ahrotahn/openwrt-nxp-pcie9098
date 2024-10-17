@@ -154,10 +154,15 @@ Change log:
 #endif /* SDIW624 */
 
 #ifdef SDAW693
+#define SDAW693_A0 0x00
+#define SDAW693_A1 0x01
 #define SDAW693_DEFAULT_COMBO_FW_NAME "nxp/sdsdwaw693_combo.bin"
 #define SDUARTAW693_COMBO_FW_NAME "nxp/sduartw693_combo.bin"
 #define SDSDAW693_COMBO_FW_NAME "sdsdaw693_combo.bin"
+#define SDUARTAW693_COMBO_V1_FW_NAME "nxp/sduartw693_combo_v1.bin.se"
+#define SDSDAW693_COMBO_V1_FW_NAME "sdsdaw693_combo_v1.bin.se"
 #define SDAW693_DEFAULT_WLAN_FW_NAME "nxp/sdaw693_wlan.bin"
+#define SDAW693_WLAN_V1_FW_NAME "nxp/sdaw693_wlan_v1.bin.se"
 #endif /* SDAW693 */
 
 #ifdef SD9177
@@ -177,12 +182,12 @@ Change log:
 #define SD9177_DEFAULT_RFTM_WLAN_V1_FW_NAME "nxp/sd_w61x_rftm_v1.bin.se"
 #endif /* SD9177 */
 
-#ifdef SDIW615
-#define SDIW615_DEFAULT_COMBO_FW_NAME "nxp/sdsdiw615_combo.bin"
-#define SDUARTIW615_COMBO_FW_NAME "nxp/sduartiw615_combo.bin"
-#define SDSDIW615_COMBO_FW_NAME "sdsdiw615_combo.bin"
-#define SDIW615_DEFAULT_WLAN_FW_NAME "nxp/sdiw615_wlan.bin"
-#endif /* SDIW615 */
+#ifdef SDIW610
+#define SDIW610_DEFAULT_COMBO_FW_NAME "nxp/sduartspi_iw610.bin.se"
+#define SDUARTIW610_COMBO_FW_NAME "nxp/sduart_iw610.bin.se"
+#define SDUARTSPIIW610_COMBO_FW_NAME "nxp/sduartspi_iw610.bin.se"
+#define SDIW610_DEFAULT_WLAN_FW_NAME "nxp/sd_iw610.bin.se"
+#endif /* SDIW610 */
 
 /********************************************************
 		Global Functions
@@ -220,6 +225,20 @@ typedef struct _sdio_mmc_card {
 	t_u8 work_flags;
 	/** saved host clock value */
 	unsigned int host_clock;
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 11, 0)
+	/** oob irq */
+	int oob_irq;
+	/** irq enabled */
+	int irq_enabled;
+	/** sdio func intr enabled **/
+	int sdio_func_intr_enabled;
+	/** irq registered */
+	int irq_registered;
+	/* SDIO OOB Interrupt handling workqueue */
+	struct workqueue_struct *sdio_oob_irq_workqueue;
+	/* SDIO OOB Interrupt handler work */
+	struct work_struct sdio_oob_irq_work;
+#endif
 } sdio_mmc_card;
 void woal_sdio_reset_hw(moal_handle *handle);
 #endif /* SDIO_MMC */

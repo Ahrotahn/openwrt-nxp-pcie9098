@@ -466,6 +466,9 @@ Change log:
 /** Max interrupt status register read limit */
 #define MAX_READ_REG_RETRY 10000
 
+/* check TX done ring on every X pushed packets */
+#define TX_DONE_POLL_DISTANCE 16
+
 extern mlan_adapter_operations mlan_pcie_ops;
 
 /* Get pcie device from card type */
@@ -479,6 +482,13 @@ mlan_status wlan_set_pcie_buf_config(mlan_private *pmpriv);
 mlan_status wlan_cmd_pcie_host_buf_cfg(pmlan_private pmpriv,
 				       pHostCmd_DS_COMMAND cmd,
 				       t_u16 cmd_action, t_pvoid pdata_buf);
+#endif
+
+#if defined(PCIE)
+/** Prepare command PCIE host buffer config */
+mlan_status wlan_cmd_pcie_adma_init(pmlan_private pmpriv,
+				    pHostCmd_DS_COMMAND cmd, t_u16 cmd_action,
+				    t_pvoid pdata_buf);
 #endif
 
 /** Wakeup PCIE card */

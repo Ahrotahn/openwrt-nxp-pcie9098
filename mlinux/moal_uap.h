@@ -103,6 +103,11 @@ Change log:
 /** BSS RESET */
 #define UAP_BSS_RESET 2
 
+/* HE MAC Capabilities Information field BIT 1 for TWT Req */
+#define HE_MAC_CAP_TWT_REQ_SUPPORT MBIT(1)
+/* HE MAC Capabilities Information field BIT 2 for TWT Resp*/
+#define HE_MAC_CAP_TWT_RESP_SUPPORT MBIT(2)
+
 /** wapi_msg */
 typedef struct _wapi_msg {
 	/** message type */

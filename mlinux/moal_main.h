@@ -46,6 +46,7 @@ Change log:
 #include <linux/sched.h>
 #include <linux/ip.h>
 #include <linux/ipv6.h>
+#include <linux/hashtable.h>
 #if LINUX_VERSION_CODE > KERNEL_VERSION(4, 10, 17)
 #include <uapi/linux/sched/types.h>
 #endif
@@ -313,9 +314,28 @@ typedef t_u8 BOOLEAN;
 #define CARD_TYPE_PCIEIW624_UARTUART 7 // As per datasheet/SoC design
 /** card type PCIEIW624_UARTSPI */
 #define CARD_TYPE_PCIEIW624_UARTSPI 5 // As per datasheet/SoC design
+/** card type SDIW615_sd_uart_spi **/
+#ifdef SDIW610
+#define CARD_TYPE_SDIW610_UART                                                 \
+	1 // As per datasheet/SoC design - Nighthawk, sd-uart strap = 0x3
+#endif
+#ifdef USBIW610
+#define CARD_TYPE_USBIW610_USB                                                 \
+	5 // As per datasheet/SoC design - Nighthawk, usb-usb strap = 0x5
+#define CARD_TYPE_USBIW610_UART                                                \
+	7 // As per datasheet/SoC design - Nighthawk, usb-uart strap = 0x7
+#endif
 
 /* Max buffer size */
 #define MAX_BUF_LEN 512
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 38)
+/* Max hostname length */
+#define MAX_HOSTNAME_LEN 128
+
+/* Max rtc time length */
+#define MAX_TIME_LEN 128
+#endif
 
 /** Driver version */
 extern char driver_version[];
@@ -364,6 +384,7 @@ typedef enum {
 	RDWR_STATUS_DONE = 2
 } rdwr_status;
 #endif
+
 /** Private structure for MOAL */
 typedef struct _moal_private moal_private, *pmoal_private;
 /** Handle data structure for MOAL  */
@@ -989,6 +1010,12 @@ mlan_status woal_do_dfs_cac(moal_private *priv,
 /** LOW Tx Pending count */
 #define LOW_TX_PENDING 380
 
+/** MAX Tx Pending count when multi-client scheduling is used  */
+#define MCLIENT_MAX_TX_PENDING (128 * MAX_STA_COUNT)
+
+/** LOW Tx Pending count when multi-client scheduling is used */
+#define MCLIENT_LOW_TX_PENDING (MCLIENT_MAX_TX_PENDING * 3 / 4)
+
 /** Offset for subcommand */
 #define SUBCMD_OFFSET 4
 
@@ -998,6 +1025,8 @@ mlan_status woal_do_dfs_cac(moal_private *priv,
 #define DEF_MIRACAST_SCAN_TIME 20
 /** GAP value is optional */
 #define GAP_FLAG_OPTIONAL MBIT(15)
+
+#define AUTH_TX_DEFAULT_WAIT_TIME 2400
 
 /** max retry count for wait_event_interupptible_xx while loop */
 #define MAX_RETRY_CNT 100
@@ -1066,7 +1095,8 @@ typedef struct _wait_queue {
 /** Driver mode uAP bit */
 #define DRV_MODE_UAP MBIT(1)
 /** Maximum uAP BSS */
-#define MAX_UAP_BSS 3
+#define MAX_UAP_BSS 2
+#define MAX_UAP_BSS_DUAL_MAC 3
 /** Default uAP BSS */
 #define DEF_UAP_BSS 1
 
@@ -1217,6 +1247,7 @@ enum woal_event_type {
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
 	WOAL_EVENT_DEAUTH,
 	WOAL_EVENT_ASSOC_RESP,
+	WOAL_EVENT_ASSOC_TIMEOUT,
 #endif
 #endif
 	WOAL_EVENT_CHAN_RPT,
@@ -1252,6 +1283,7 @@ struct woal_event {
 	enum woal_event_type type;
 	/** priv pointer */
 	void *priv;
+	struct cfg80211_bss *assoc_bss;
 	union {
 		chan_band_info chan_info;
 		woal_evt_buf evt;
@@ -1415,6 +1447,8 @@ struct rf_test_mode_data {
 	mfg_Cmd_IEEEtypes_CtlBasicTrigHdr_t mfg_tx_trigger_config;
 	/* OTP frame data */
 	mfg_cmd_otp_mac_addr_rd_wr_t mfg_otp_mac_addr_rd_wr;
+	/* OTP CAL data */
+	mfg_cmd_otp_cal_data_rd_wr_t mfg_otp_cal_data_rd_wr;
 };
 
 /** Number of samples in histogram (/proc/mwlan/adapterX/mlan0/histogram).*/
@@ -1560,6 +1594,38 @@ struct dhcp_pkt {
 	t_u8 pOptions[1];
 } __ATTRIB_PACK__;
 
+/** IPv4 arp header */
+struct arp_hdr {
+	/** Hardware type */
+	t_u16 htype;
+	/** Protocol type */
+	t_u16 ptype;
+	/** Hardware address length */
+	t_u8 addr_len;
+	/** Protocol address length */
+	t_u8 proto_len;
+	/** Operation code */
+	t_u16 op_code;
+	/** Source mac address */
+	t_u8 sender_mac[MLAN_MAC_ADDR_LENGTH];
+	/** Sender IP address */
+	t_u8 sender_ip[4];
+	/** Destination mac address */
+	t_u8 target_mac[MLAN_MAC_ADDR_LENGTH];
+	/** Destination IP address */
+	t_u8 target_ip[4];
+} __ATTRIB_PACK__;
+
+/** ARP request entry ageout of 10 secs */
+#define ARP_REQ_AGEOUT_TIME (10 * HZ)
+
+/** ARP request node */
+struct arp_entry {
+	t_u32 hash_key;
+	struct hlist_node arp_hlist;
+	t_u64 ageout_jiffies;
+};
+
 #define EASY_MESH_MULTI_AP_FH_BSS (t_u8)(0x20)
 #define EASY_MESH_MULTI_AP_BH_BSS (t_u8)(0x40)
 #define EASY_MESH_MULTI_AP_BH_AND_FH_BSS (t_u8)(0x60)
@@ -1585,6 +1651,7 @@ struct ipv6addr_entry {
 	/** IPv6 address entry */
 	t_u8 ipv6_addr[16];
 };
+
 /** Private structure for MOAL */
 struct _moal_private {
 	/** Handle structure */
@@ -1934,6 +2001,8 @@ struct _moal_private {
 	t_u8 tdls_check_tx;
 	auto_assoc auto_assoc_priv;
 #if CFG80211_VERSION_CODE > KERNEL_VERSION(2, 6, 29)
+	t_u32 max_tx_pending;
+	t_u32 low_tx_pending;
 	atomic_t wmm_tx_pending[4];
 #endif
 	struct sk_buff_head tx_q;
@@ -1979,12 +2048,17 @@ struct _moal_private {
 	spinlock_t dhcp_discover_lock;
 	/** DHCP DISCOVER Info queue */
 	struct list_head dhcp_discover_queue;
+	/** hash table for arp request */
+	DECLARE_HASHTABLE(hlist, 8);
+	/** arp request lock */
+	spinlock_t arp_request_lock;
 	/** txwatchdog disable */
 	t_u8 txwatchdog_disable;
 
 	/** secure boot uuid lower and higher 8 bytes */
 	t_u64 uuid_lo;
 	t_u64 uuid_hi;
+	t_u16 auth_tx_wait_time;
 };
 
 #ifdef SDIO
@@ -2526,6 +2600,7 @@ enum ext_mod_params {
 	EXT_PMQOS,
 	EXT_CHAN_TRACK,
 	EXT_DMCS,
+	EXT_PREF_DBC,
 	EXT_MAX_PARAM,
 };
 
@@ -2560,6 +2635,7 @@ typedef struct _moal_mod_para {
 	int uap_max_sta;
 	int wacp_mode;
 #endif /* UAP_SUPPORT */
+	unsigned int fw_data_cfg;
 #ifdef WIFI_DIRECT_SUPPORT
 	int max_wfd_bss;
 	char *wfd_name;
@@ -2572,7 +2648,10 @@ typedef struct _moal_mod_para {
 	int auto_ds;
 	int net_rx;
 	int amsdu_deaggr;
+	int tx_budget;
+	int mclient_scheduling;
 	int ext_scan;
+	int bootup_cal_ctrl;
 	int ps_mode;
 	int p2a_scan;
 	/** scan chan gap */
@@ -2612,6 +2691,10 @@ typedef struct _moal_mod_para {
 	unsigned int dev_cap_mask;
 	int pmic;
 	int antcfg;
+	/** dmcs*/
+	int dmcs;
+	/** pref_dbc*/
+	int pref_dbc;
 	unsigned int uap_oper_ctrl;
 	int hs_wake_interval;
 	int indication_gpio;
@@ -3383,6 +3466,12 @@ extern t_u32 drvdbg;
 			printk(KERN_DEBUG msg);                                \
 	} while (0)
 
+#define PRINTM_MREG(level, msg...)                                             \
+	do {                                                                   \
+		woal_print(level, msg);                                        \
+		if (drvdbg & MREG)                                             \
+			printk(KERN_DEBUG msg);                                \
+	} while (0)
 #define PRINTM_MIOCTL(level, msg...)                                           \
 	do {                                                                   \
 		woal_print(level, msg);                                        \
@@ -4353,6 +4442,9 @@ void woal_flush_dhcp_discover_queue(moal_private *priv);
 t_u32 woal_get_dhcp_discover_transation_id(struct sk_buff *skb);
 t_void woal_add_dhcp_discover_node(moal_private *priv, t_u32 transaction_id,
 				   mlan_buffer *pmbuf);
+t_void woal_add_arp_request_node(moal_private *priv, t_u32 hash_key);
+t_u32 woal_generate_arp_request_hash(struct sk_buff *skb);
+t_void woal_flush_arp_request_entry(moal_private *priv);
 #endif
 
 mlan_status woal_set_get_wowlan_config(moal_private *priv, t_u16 action,
@@ -4449,4 +4541,9 @@ mlan_status woal_edmac_cfg(moal_private *priv, t_u8 *country_code);
 #ifdef DUMP_TO_PROC
 void woal_print_firmware_dump_buf(t_u8 *pfd_buf, t_u64 fwdump_len);
 #endif
+
+#if !defined(STA_CFG80211) && !defined(UAP_CFG80211)
+unsigned int woal_classify8021d(struct sk_buff *skb);
+#endif
+
 #endif /* _MOAL_MAIN_H */

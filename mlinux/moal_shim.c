@@ -225,7 +225,8 @@ mlan_status moal_malloc_consistent(t_void *pmoal, t_u32 size, t_u8 **ppbuf,
 		return MLAN_STATUS_FAILURE;
 	}
 #ifdef PCIEAW693
-	if (IS_PCIEAW693(handle->card_type))
+	if (IS_PCIEAW693(handle->card_type) &&
+	    (handle->card_rev == CHIP_AW693_REV_A0))
 		dma |= 0x100000000;
 #endif
 	*pbuf_pa = (t_u64)dma;
@@ -253,7 +254,8 @@ mlan_status moal_mfree_consistent(t_void *pmoal, t_u32 size, t_u8 *pbuf,
 	if (!pbuf || !card)
 		return MLAN_STATUS_FAILURE;
 #ifdef PCIEAW693
-	if (IS_PCIEAW693(handle->card_type))
+	if (IS_PCIEAW693(handle->card_type) &&
+	    (handle->card_rev == CHIP_AW693_REV_A0))
 		buf_pa &= 0xffffffff;
 #endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
@@ -301,7 +303,8 @@ mlan_status moal_map_memory(t_void *pmoal, t_u8 *pbuf, t_u64 *pbuf_pa,
 		return MLAN_STATUS_FAILURE;
 	}
 #ifdef PCIEAW693
-	if (IS_PCIEAW693(handle->card_type))
+	if (IS_PCIEAW693(handle->card_type) &&
+	    (handle->card_rev == CHIP_AW693_REV_A0))
 		dma |= 0x100000000;
 #endif
 	*pbuf_pa = dma;
@@ -328,7 +331,8 @@ mlan_status moal_unmap_memory(t_void *pmoal, t_u8 *pbuf, t_u64 buf_pa,
 	if (!card)
 		return MLAN_STATUS_FAILURE;
 #ifdef PCIEAW693
-	if (IS_PCIEAW693(handle->card_type))
+	if (IS_PCIEAW693(handle->card_type) &&
+	    (handle->card_rev == CHIP_AW693_REV_A0))
 		buf_pa &= 0xffffffff;
 #endif
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 18, 0)
@@ -1055,11 +1059,17 @@ mlan_status moal_ioctl_complete(t_void *pmoal, pmlan_ioctl_req pioctl_req,
 	}
 
 	if (status != MLAN_STATUS_SUCCESS && status != MLAN_STATUS_COMPLETE)
-		PRINTM(MERROR,
-		       "IOCTL failed: %p id=0x%x, sub_id=0x%x action=%d, status_code=0x%x\n",
-		       pioctl_req, pioctl_req->req_id,
-		       (*(t_u32 *)pioctl_req->pbuf), (int)pioctl_req->action,
-		       pioctl_req->status_code);
+		if (handle->rf_test_mode == MTRUE)
+			PRINTM(MERROR,
+			       "Operation id=0x%x not allowed in rf-mode\n",
+			       pioctl_req->req_id);
+		else
+			PRINTM(MERROR,
+			       "IOCTL failed: %p id=0x%x, sub_id=0x%x action=%d, status_code=0x%x\n",
+			       pioctl_req, pioctl_req->req_id,
+			       (*(t_u32 *)pioctl_req->pbuf),
+			       (int)pioctl_req->action,
+			       pioctl_req->status_code);
 	else
 		PRINTM(MIOCTL,
 		       "IOCTL completed: %p id=0x%x sub_id=0x%x, action=%d,  status=%d, status_code=0x%x\n",
@@ -1209,7 +1219,7 @@ mlan_status moal_send_packet_complete(t_void *pmoal, pmlan_buffer pmbuf,
 					atomic_dec(&handle->tx_pending);
 					if (atomic_dec_return(
 						    &priv->wmm_tx_pending[index]) ==
-					    LOW_TX_PENDING) {
+					    priv->low_tx_pending) {
 						struct netdev_queue *txq =
 							netdev_get_tx_queue(
 								priv->netdev,
@@ -2114,6 +2124,10 @@ mlan_status moal_recv_amsdu_packet(t_void *pmoal, pmlan_buffer pmbuf)
 		}
 		frame->protocol = eth_type_trans(frame, netdev);
 		frame->ip_summed = CHECKSUM_NONE;
+
+		priv->stats.rx_bytes += frame->len;
+		priv->stats.rx_packets++;
+
 		if (in_interrupt())
 			netif_rx(frame);
 		else {
@@ -2322,9 +2336,10 @@ mlan_status moal_recv_packet(t_void *pmoal, pmlan_buffer pmbuf)
 			}
 #endif
 #endif
-			if (priv->multi_ap_flag &&
-			    priv->bss_type == MLAN_BSS_TYPE_STA) {
+			if (priv->wdev->use_4addr &&
+			    priv->wdev->iftype == NL80211_IFTYPE_STATION) {
 				t_u32 transaction_id;
+				t_u32 hash_key;
 				transaction_id =
 					woal_get_dhcp_discover_transation_id(
 						skb);
@@ -2336,6 +2351,23 @@ mlan_status moal_recv_packet(t_void *pmoal, pmlan_buffer pmbuf)
 					       transaction_id);
 					dev_kfree_skb(skb);
 					goto done;
+				}
+
+				hash_key = woal_generate_arp_request_hash(skb);
+				// TODO: Drop too old entry
+				if (hash_key) {
+					struct arp_entry *node;
+					hash_for_each_possible (priv->hlist,
+								node, arp_hlist,
+								hash_key) {
+						if (node->hash_key ==
+						    hash_key) {
+							PRINTM(MDATA,
+							       "ARP entry exists, drop pkt\n");
+							dev_kfree_skb(skb);
+							goto done;
+						}
+					}
 				}
 			}
 			if (!netdev)
@@ -3043,12 +3075,6 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 	case MLAN_EVENT_ID_DRV_SCAN_REPORT:
 		PRINTM(MINFO, "Scan report\n");
 
-		if (priv->phandle->scan_pending_on_block == MTRUE) {
-			priv->phandle->scan_pending_on_block = MFALSE;
-			priv->phandle->scan_priv = NULL;
-			MOAL_REL_SEMAPHORE(&priv->phandle->async_sem);
-		}
-
 		if (priv->report_scan_result) {
 			priv->report_scan_result = MFALSE;
 #ifdef STA_CFG80211
@@ -3100,7 +3126,11 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 			woal_broadcast_event(priv, (t_u8 *)&pmevent->event_id,
 					     sizeof(mlan_event_id));
 		}
-
+		if (priv->phandle->scan_pending_on_block == MTRUE) {
+			priv->phandle->scan_pending_on_block = MFALSE;
+			priv->phandle->scan_priv = NULL;
+			MOAL_REL_SEMAPHORE(&priv->phandle->async_sem);
+		}
 		if (!is_zero_timeval(priv->phandle->scan_time_start)) {
 			woal_get_monotonic_time(&priv->phandle->scan_time_end);
 			priv->phandle->scan_time +=
@@ -5084,6 +5114,55 @@ t_void moal_updata_peer_signal(t_void *pmoal, t_u32 bss_index, t_u8 *peer_addr,
 		}
 		spin_unlock_irqrestore(&priv->tdls_lock, flags);
 	}
+}
+#if 0
+/**
+ *  @brief This function records host time in nano seconds
+ *
+ *  @return                 64 bit value of host time in nano seconds
+ */
+s64 get_host_time_ns(void)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	struct timespec64 ts;
+#else
+	struct timespec ts;
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	ktime_get_real_ts64(&ts);
+	return timespec64_to_ns(&ts);
+#else
+	getnstimeofday(&ts);
+	return timespec_to_ns(&ts);
+#endif
+}
+#endif
+
+/**
+ *  @brief Retrieves the current system time
+ *
+ *  @param time     Pointer for the seconds of system time
+ *
+ *  @return         MLAN_STATUS_SUCCESS
+ */
+mlan_status moal_get_host_time_ns(t_u64 *time)
+{
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	struct timespec64 ts;
+#else
+	struct timespec ts;
+#endif
+	t_u64 hclk_val;
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
+	ktime_get_real_ts64(&ts);
+#else
+	getnstimeofday(&ts);
+#endif
+	hclk_val = (ts.tv_sec * 1000000000L) + ts.tv_nsec;
+	*time = hclk_val;
+	return MLAN_STATUS_SUCCESS;
 }
 
 /**

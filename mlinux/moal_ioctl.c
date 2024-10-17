@@ -906,12 +906,12 @@ void woal_request_set_multicast_list(moal_private *priv, struct net_device *dev)
 	bss->sub_command = MLAN_OID_BSS_MULTICAST_LIST;
 	req->req_id = MLAN_IOCTL_BSS;
 	req->action = MLAN_ACT_SET;
-	if (dev->flags & IFF_PROMISC) {
-		bss->param.multicast_list.mode = MLAN_PROMISC_MODE;
-	} else if (dev->flags & IFF_ALLMULTI) {
+	if (dev->flags & IFF_ALLMULTI) {
 		bss->param.multicast_list.mode = MLAN_ALL_MULTI_MODE;
 	} else {
-		bss->param.multicast_list.mode = MLAN_MULTICAST_MODE;
+		if (dev->flags & IFF_PROMISC)
+			bss->param.multicast_list.mode = MLAN_PROMISC_MODE;
+		bss->param.multicast_list.mode |= MLAN_MULTICAST_MODE;
 		mc_count = woal_copy_all_mc_list(priv->phandle,
 						 &bss->param.multicast_list);
 		if (mc_count > MLAN_MAX_MULTICAST_LIST_SIZE)
@@ -1283,6 +1283,11 @@ mlan_status woal_bss_start(moal_private *priv, t_u8 wait_option,
 	kfree(temp_ssid_bssid);
 #endif
 
+	if (MOAL_ACQ_SEMAPHORE_BLOCK(&priv->phandle->async_sem)) {
+		PRINTM(MERROR, "Acquire semaphore error, woal_bss_start\n");
+		LEAVE();
+		return -EBUSY;
+	}
 	/* Allocate an IOCTL request buffer */
 	req = (mlan_ioctl_req *)woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_bss));
 	if (req == NULL) {
@@ -1308,10 +1313,12 @@ mlan_status woal_bss_start(moal_private *priv, t_u8 wait_option,
 				sizeof(mlan_ssid_bssid));
 #ifdef STA_CFG80211
 #ifdef STA_SUPPORT
-	priv->assoc_status = req->status_code;
+	if (status != MLAN_STATUS_PENDING)
+		priv->assoc_status = req->status_code;
 #endif
 #endif
 done:
+	MOAL_REL_SEMAPHORE(&priv->phandle->async_sem);
 	if (status != MLAN_STATUS_PENDING)
 		kfree(req);
 	LEAVE();
@@ -2183,10 +2190,12 @@ mlan_status woal_request_get_fw_info(moal_private *priv, t_u8 wait_option,
 					sizeof(mlan_fw_info),
 					sizeof(mlan_fw_info));
 		DBG_HEXDUMP(MCMD_D, "mac", priv->current_addr, 6);
-	} else
+	} else if (status != MLAN_STATUS_PENDING)
 		PRINTM(MERROR,
 		       "get fw info failed! status=%d, error_code=0x%x\n",
 		       status, req->status_code);
+	else
+		PRINTM(MERROR, "get fw info failed! status=%d", status);
 done:
 	if (status != MLAN_STATUS_PENDING)
 		kfree(req);
@@ -6093,8 +6102,27 @@ mlan_status woal_cancel_scan(moal_private *priv, t_u8 wait_option)
 	unsigned long flags;
 #endif
 	/* If scan is in process, cancel the scan command */
-	if (!handle->scan_pending_on_block || !scan_priv)
+	if (!handle->scan_pending_on_block || !scan_priv) {
+#ifdef STA_CFG80211
+		spin_lock_irqsave(&handle->scan_req_lock, flags);
+		if (IS_STA_CFG80211(handle->params.cfg80211_wext) &&
+		    handle->scan_request) {
+			cancel_delayed_work(&handle->scan_timeout_work);
+			/* some supplicant cannot handle SCAN abort event */
+			if (scan_priv &&
+			    (scan_priv->bss_type == MLAN_BSS_TYPE_STA))
+				woal_cfg80211_scan_done(handle->scan_request,
+							MTRUE);
+			else
+				woal_cfg80211_scan_done(handle->scan_request,
+							MFALSE);
+			handle->scan_request = NULL;
+			handle->fake_scan_complete = MFALSE;
+		}
+		spin_unlock_irqrestore(&handle->scan_req_lock, flags);
+#endif
 		return ret;
+	}
 	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_scan));
 	if (req == NULL) {
 		ret = MLAN_STATUS_FAILURE;
@@ -6643,7 +6671,7 @@ mlan_status woal_set_rssi_low_threshold(moal_private *priv, char *rssi,
 	priv->mrvl_rssi_low = low_rssi;
 #endif
 	misc->param.subscribe_event.low_rssi = low_rssi;
-	misc->param.subscribe_event.low_rssi_freq = 1;
+	misc->param.subscribe_event.low_rssi_freq = 0;
 	ret = woal_request_ioctl(priv, req, wait_option);
 	if (ret == MLAN_STATUS_FAILURE) {
 		PRINTM(MERROR, "request set rssi_low_threshold fail!\n");
@@ -6707,7 +6735,7 @@ mlan_status woal_set_rssi_threshold(moal_private *priv, t_u32 event_id,
 			SUBSCRIBE_EVT_ACT_BITWISE_SET;
 	misc->param.subscribe_event.evt_bitmap =
 		SUBSCRIBE_EVT_RSSI_LOW | SUBSCRIBE_EVT_RSSI_HIGH;
-	misc->param.subscribe_event.low_rssi_freq = 1;
+	misc->param.subscribe_event.low_rssi_freq = 0;
 	misc->param.subscribe_event.low_rssi = priv->last_rssi_low;
 	misc->param.subscribe_event.high_rssi_freq = 0;
 	misc->param.subscribe_event.high_rssi = priv->last_rssi_high;
@@ -7676,6 +7704,9 @@ mlan_status woal_multi_ap_cfg(moal_private *priv, t_u8 wait_option, t_u8 flag)
 	if (status != MLAN_STATUS_SUCCESS)
 		goto done;
 
+	PRINTM(MCMND, "%s: %s 4addr mode\n", priv->netdev->name,
+	       flag ? "Enable" : "Disable");
+
 done:
 	if (status != MLAN_STATUS_PENDING)
 		kfree(req);
@@ -8292,7 +8323,7 @@ static int parse_tx_pwr_string(moal_handle *handle, const char *s, size_t len,
 	card_type = (handle->card_type) & 0xff;
 	if ((card_type == CARD_TYPE_9098) || (card_type == CARD_TYPE_9097) ||
 	    (card_type == CARD_TYPE_9177) || (card_type == CARD_TYPE_IW624) ||
-	    (card_type == CARD_TYPE_AW693))
+	    (card_type == CARD_TYPE_AW693) || (card_type == CARD_TYPE_IW610))
 		pow_conv = MTRUE;
 
 	flag = (in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL;
@@ -8643,6 +8674,32 @@ static int parse_tx_frame_string(const char *s, size_t len,
 	if (string == NULL)
 		return -ENOMEM;
 
+	/*Initialize the parameters to default values to be used*/
+	d->data_rate = 0x1100;
+	d->frame_pattern = 0xB496DEB6;
+	d->frame_length = 0x400;
+	d->enable = 0;
+	d->short_preamble = -1;
+	d->short_gi = 0;
+	d->adv_coding = -1;
+	d->tx_bf = 0;
+	d->gf_mode = 0;
+	d->stbc = 0;
+	d->adjust_burst_sifs = 0;
+	d->burst_sifs_in_us = 0;
+	d->signal_bw = -1;
+	d->NumPkt = -1;
+	d->MaxPE = -1;
+	d->BeamChange = -1;
+	d->Dcm = -1;
+	d->Doppler = -1;
+	d->MidP = -1;
+	d->QNum = -1;
+
+	for (i = 0; i < ETH_ALEN; i++) {
+		d->bssid[i] = 0xff;
+	}
+
 	moal_memcpy_ext(NULL, string, s + strlen("tx_frame="),
 			len - strlen("tx_frame="), TX_FRAME_STR_LEN - 1);
 
@@ -8747,12 +8804,7 @@ static int parse_tx_frame_string(const char *s, size_t len,
 		}
 	}
 
-	if ((d->enable > 1) || (d->frame_length == 0) ||
-	    (d->adjust_burst_sifs > 1) || (d->burst_sifs_in_us > 255) ||
-	    (d->short_preamble > 1) ||
-	    (d->act_sub_ch == 2 || d->act_sub_ch > 3) || (d->short_gi > 1) ||
-	    (d->adv_coding > 1) || (d->tx_bf > 1) || (d->gf_mode > 1) ||
-	    (d->stbc > 1))
+	if (d->enable > 1)
 		ret = -EINVAL;
 done:
 	kfree(tmp);
@@ -8953,6 +9005,50 @@ done:
 	return ret;
 }
 
+/*
+ *  @brief Parse mfg cmd otp cal data rdwr
+ *
+ *  @param handle   A pointer to moal_handle structure
+ *  @param s        A pointer to user buffer
+ *  @param len      Length of user buffer
+ *  @param d        A pointer to mfg_cmd_generic_cfg struct
+ *  @return         0 on success, -EINVAL otherwise
+ */
+
+static int parse_otp_cal_data_rd_wr_string(const char *s, size_t len,
+					   mfg_cmd_otp_cal_data_rd_wr_t *d)
+{
+	int ret = MLAN_STATUS_SUCCESS;
+	char *string = NULL;
+	char *pos = NULL;
+	int i = 0;
+
+	ENTER();
+	if (!s || !d) {
+		LEAVE();
+		return -EINVAL;
+	}
+
+	string = (char *)&(s[strlen("otp_cal_data_rd_wr=")]);
+	pos = strsep(&string, " \t");
+	d->action = (t_u16)woal_string_to_number(pos);
+	if (d->action == MFALSE)
+		goto done;
+
+	for (i = 0; i < CAL_DATA_LEN; i++) {
+		pos = strsep(&string, " \t");
+		if (pos) {
+			d->cal_data[i] = (t_u16)woal_string_to_number(pos);
+			d->cal_data_len++;
+		}
+	}
+	if (d->action > 1)
+		ret = -EINVAL;
+done:
+	LEAVE();
+	return ret;
+}
+
 /**
  *  @brief This function sends RF test mode command in firmware
  *
@@ -9044,6 +9140,13 @@ mlan_status woal_process_rf_test_mode_cmd(moal_handle *handle, t_u32 cmd,
 		misc->sub_command = MLAN_OID_MISC_OTP_MAC_RD_WR;
 		if (parse_otp_mac_addr_rd_wr_string(
 			    buffer, len, &misc->param.mfg_otp_mac_addr_rd_wr)) {
+			err = MTRUE;
+		}
+		break;
+	case MFG_CMD_OTP_CAL_DATA:
+		misc->sub_command = MLAN_OID_MISC_OTP_CAL_DATA_RD_WR;
+		if (parse_otp_cal_data_rd_wr_string(
+			    buffer, len, &misc->param.mfg_otp_cal_data_rd_wr)) {
 			err = MTRUE;
 		}
 		break;
@@ -9203,6 +9306,15 @@ mlan_status woal_process_rf_test_mode_cmd(moal_handle *handle, t_u32 cmd,
 		for (i = 0; i < ETH_ALEN; i++) {
 			handle->rf_data->mfg_otp_mac_addr_rd_wr.mac_addr[i] =
 				misc->param.mfg_otp_mac_addr_rd_wr.mac_addr[i];
+		}
+		break;
+	case MFG_CMD_OTP_CAL_DATA:
+		handle->rf_data->mfg_otp_cal_data_rd_wr.action =
+			misc->param.mfg_otp_cal_data_rd_wr.action;
+		for (i = 0; i < misc->param.mfg_otp_cal_data_rd_wr.cal_data_len;
+		     i++) {
+			handle->rf_data->mfg_otp_cal_data_rd_wr.cal_data[i] =
+				misc->param.mfg_otp_cal_data_rd_wr.cal_data[i];
 		}
 		break;
 	}

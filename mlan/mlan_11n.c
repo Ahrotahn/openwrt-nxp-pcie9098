@@ -33,6 +33,7 @@ Change log:
 #include "mlan_wmm.h"
 #include "mlan_11n.h"
 #include "mlan_11ac.h"
+#include "mlan_11ax.h"
 
 /********************************************************
 			Local Variables
@@ -510,7 +511,12 @@ static mlan_status wlan_11n_ioctl_addba_param(pmlan_adapter pmadapter,
 		cfg->param.addba_param.rxamsdu = pmpriv->add_ba_param.rx_amsdu;
 	} else {
 		timeout = pmpriv->add_ba_param.timeout;
-		pmpriv->add_ba_param.timeout = cfg->param.addba_param.timeout;
+		if (pmadapter->tx_ba_timeout_support) {
+			pmpriv->add_ba_param.timeout =
+				cfg->param.addba_param.timeout;
+		} else {
+			pmpriv->add_ba_param.timeout = 0;
+		}
 		pmpriv->add_ba_param.tx_win_size =
 			cfg->param.addba_param.txwinsize;
 
@@ -1624,8 +1630,9 @@ void wlan_show_dot11ndevcap(pmlan_adapter pmadapter, t_u32 cap)
 	PRINTM(MINFO, "GET_HW_SPEC: LDPC coded packet receive %s\n",
 	       (ISSUPP_RXLDPC(cap) ? "supported" : "not supported"));
 
-	PRINTM(MINFO, "GET_HW_SPEC: Number of Tx BA streams supported = %d\n",
-	       ISSUPP_GETTXBASTREAM(cap));
+	PRINTM(MINFO,
+	       "GET_HW_SPEC: Number of Tx BA streams supported = %d/%d\n",
+	       ISSUPP_GETTXBASTREAM(cap), wlan_get_bastream_limit(pmadapter));
 	PRINTM(MINFO, "GET_HW_SPEC: 40 Mhz channel width %s\n",
 	       (ISSUPP_CHANWIDTH40(cap) ? "supported" : "not supported"));
 	PRINTM(MINFO, "GET_HW_SPEC: 20 Mhz channel width %s\n",
@@ -2620,6 +2627,8 @@ int wlan_cmd_append_11n_tlv(mlan_private *pmpriv, BSSDescriptor_t *pbss_desc,
 			RESET_EXTCAP_EXT_CHANNEL_SWITCH(pext_cap->ext_cap);
 		else
 			SET_EXTCAP_EXT_CHANNEL_SWITCH(pext_cap->ext_cap);
+		if (wlan_check_11ax_twt_supported(pmpriv, pbss_desc))
+			SET_EXTCAP_TWT_REQ(pext_cap->ext_cap);
 
 		HEXDUMP("Extended Capabilities IE", (t_u8 *)pext_cap,
 			sizeof(MrvlIETypes_ExtCap_t));
@@ -3140,7 +3149,7 @@ int wlan_get_txbastream_tbl(mlan_private *priv, tx_ba_stream_tbl *buf)
 		LEAVE();
 		return count;
 	}
-	bastream_max = ISSUPP_GETTXBASTREAM(priv->adapter->hw_dot_11n_dev_cap);
+	bastream_max = wlan_get_bastream_limit(priv->adapter);
 	if (bastream_max == 0)
 		bastream_max = MLAN_MAX_TX_BASTREAM_DEFAULT;
 

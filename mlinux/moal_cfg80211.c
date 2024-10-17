@@ -30,6 +30,10 @@
 /********************************************************
  *				Local Variables
  ********************************************************/
+
+/* frmctl + durationid + addr1 + addr2 + addr3 + seqctl */
+#define PACKET_ADDR4_POS (2 + 2 + 6 + 6 + 6 + 2)
+
 /** Supported rates to be advertised to the cfg80211 */
 static struct ieee80211_rate cfg80211_rates[] = {
 	{
@@ -82,54 +86,59 @@ static struct ieee80211_rate cfg80211_rates[] = {
 	},
 };
 
+/** Kernel picks the min of the register max power and the regulatory max.
+      So to register the max chip capability the default max power for all
+   channels is set to 23 dbm which is the max of the typical max tx pwr out
+   range among all chips*/
+
 /** Channel definitions for 2 GHz to be advertised to cfg80211 */
 static struct ieee80211_channel cfg80211_channels_2ghz[] = {
-	{.center_freq = 2412, .hw_value = 1, .max_power = 20},
-	{.center_freq = 2417, .hw_value = 2, .max_power = 20},
-	{.center_freq = 2422, .hw_value = 3, .max_power = 20},
-	{.center_freq = 2427, .hw_value = 4, .max_power = 20},
-	{.center_freq = 2432, .hw_value = 5, .max_power = 20},
-	{.center_freq = 2437, .hw_value = 6, .max_power = 20},
-	{.center_freq = 2442, .hw_value = 7, .max_power = 20},
-	{.center_freq = 2447, .hw_value = 8, .max_power = 20},
-	{.center_freq = 2452, .hw_value = 9, .max_power = 20},
-	{.center_freq = 2457, .hw_value = 10, .max_power = 20},
-	{.center_freq = 2462, .hw_value = 11, .max_power = 20},
-	{.center_freq = 2467, .hw_value = 12, .max_power = 20},
-	{.center_freq = 2472, .hw_value = 13, .max_power = 20},
-	{.center_freq = 2484, .hw_value = 14, .max_power = 20},
+	{.center_freq = 2412, .hw_value = 1, .max_power = 23},
+	{.center_freq = 2417, .hw_value = 2, .max_power = 23},
+	{.center_freq = 2422, .hw_value = 3, .max_power = 23},
+	{.center_freq = 2427, .hw_value = 4, .max_power = 23},
+	{.center_freq = 2432, .hw_value = 5, .max_power = 23},
+	{.center_freq = 2437, .hw_value = 6, .max_power = 23},
+	{.center_freq = 2442, .hw_value = 7, .max_power = 23},
+	{.center_freq = 2447, .hw_value = 8, .max_power = 23},
+	{.center_freq = 2452, .hw_value = 9, .max_power = 23},
+	{.center_freq = 2457, .hw_value = 10, .max_power = 23},
+	{.center_freq = 2462, .hw_value = 11, .max_power = 23},
+	{.center_freq = 2467, .hw_value = 12, .max_power = 23},
+	{.center_freq = 2472, .hw_value = 13, .max_power = 23},
+	{.center_freq = 2484, .hw_value = 14, .max_power = 23},
 };
 
 /** Channel definitions for 5 GHz to be advertised to cfg80211 */
 static struct ieee80211_channel cfg80211_channels_5ghz[] = {
-	{.center_freq = 5180, .hw_value = 36, .max_power = 20},
-	{.center_freq = 5200, .hw_value = 40, .max_power = 20},
-	{.center_freq = 5220, .hw_value = 44, .max_power = 20},
-	{.center_freq = 5240, .hw_value = 48, .max_power = 20},
-	{.center_freq = 5260, .hw_value = 52, .max_power = 20},
-	{.center_freq = 5280, .hw_value = 56, .max_power = 20},
-	{.center_freq = 5300, .hw_value = 60, .max_power = 20},
-	{.center_freq = 5320, .hw_value = 64, .max_power = 20},
-	{.center_freq = 5500, .hw_value = 100, .max_power = 20},
-	{.center_freq = 5520, .hw_value = 104, .max_power = 20},
-	{.center_freq = 5540, .hw_value = 108, .max_power = 20},
-	{.center_freq = 5560, .hw_value = 112, .max_power = 20},
-	{.center_freq = 5580, .hw_value = 116, .max_power = 20},
-	{.center_freq = 5600, .hw_value = 120, .max_power = 20},
-	{.center_freq = 5620, .hw_value = 124, .max_power = 20},
-	{.center_freq = 5640, .hw_value = 128, .max_power = 20},
-	{.center_freq = 5660, .hw_value = 132, .max_power = 20},
-	{.center_freq = 5680, .hw_value = 136, .max_power = 20},
-	{.center_freq = 5700, .hw_value = 140, .max_power = 20},
-	{.center_freq = 5720, .hw_value = 144, .max_power = 20},
-	{.center_freq = 5745, .hw_value = 149, .max_power = 20},
-	{.center_freq = 5765, .hw_value = 153, .max_power = 20},
-	{.center_freq = 5785, .hw_value = 157, .max_power = 20},
-	{.center_freq = 5805, .hw_value = 161, .max_power = 20},
-	{.center_freq = 5825, .hw_value = 165, .max_power = 20},
-	{.center_freq = 5845, .hw_value = 169, .max_power = 20},
-	{.center_freq = 5865, .hw_value = 173, .max_power = 20},
-	{.center_freq = 5885, .hw_value = 177, .max_power = 20},
+	{.center_freq = 5180, .hw_value = 36, .max_power = 23},
+	{.center_freq = 5200, .hw_value = 40, .max_power = 23},
+	{.center_freq = 5220, .hw_value = 44, .max_power = 23},
+	{.center_freq = 5240, .hw_value = 48, .max_power = 23},
+	{.center_freq = 5260, .hw_value = 52, .max_power = 23},
+	{.center_freq = 5280, .hw_value = 56, .max_power = 23},
+	{.center_freq = 5300, .hw_value = 60, .max_power = 23},
+	{.center_freq = 5320, .hw_value = 64, .max_power = 23},
+	{.center_freq = 5500, .hw_value = 100, .max_power = 23},
+	{.center_freq = 5520, .hw_value = 104, .max_power = 23},
+	{.center_freq = 5540, .hw_value = 108, .max_power = 23},
+	{.center_freq = 5560, .hw_value = 112, .max_power = 23},
+	{.center_freq = 5580, .hw_value = 116, .max_power = 23},
+	{.center_freq = 5600, .hw_value = 120, .max_power = 23},
+	{.center_freq = 5620, .hw_value = 124, .max_power = 23},
+	{.center_freq = 5640, .hw_value = 128, .max_power = 23},
+	{.center_freq = 5660, .hw_value = 132, .max_power = 23},
+	{.center_freq = 5680, .hw_value = 136, .max_power = 23},
+	{.center_freq = 5700, .hw_value = 140, .max_power = 23},
+	{.center_freq = 5720, .hw_value = 144, .max_power = 23},
+	{.center_freq = 5745, .hw_value = 149, .max_power = 23},
+	{.center_freq = 5765, .hw_value = 153, .max_power = 23},
+	{.center_freq = 5785, .hw_value = 157, .max_power = 23},
+	{.center_freq = 5805, .hw_value = 161, .max_power = 23},
+	{.center_freq = 5825, .hw_value = 165, .max_power = 23},
+	{.center_freq = 5845, .hw_value = 169, .max_power = 23},
+	{.center_freq = 5865, .hw_value = 173, .max_power = 23},
+	{.center_freq = 5885, .hw_value = 177, .max_power = 23},
 };
 
 struct ieee80211_supported_band cfg80211_band_2ghz = {
@@ -173,6 +182,10 @@ int woal_11ax_cfg(moal_private *priv, t_u8 action, mlan_ds_11ax_he_cfg *he_cfg,
 		  t_u8 wait_option);
 #endif
 #endif
+
+static t_u8 *woal_remove_11ax_ies(moal_private *priv, t_u8 *ie, t_u8 len,
+				  t_u8 *new_ie_len, t_u32 ie_out_len,
+				  t_u8 *skipped_len);
 
 /**
  * @brief Get the private structure from wiphy
@@ -1138,6 +1151,10 @@ int woal_cfg80211_change_virtual_intf(struct wiphy *wiphy,
 #if defined(STA_SUPPORT) && defined(UAP_SUPPORT)
 	t_u8 bss_role;
 #endif
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+	moal_private *dfs_priv =
+		woal_get_priv_bss_type(priv->phandle, MLAN_BSS_TYPE_DFS);
+#endif
 	mlan_status status = MLAN_STATUS_SUCCESS;
 
 	ENTER();
@@ -1156,6 +1173,22 @@ int woal_cfg80211_change_virtual_intf(struct wiphy *wiphy,
 	 */
 	if (priv->wdev->iftype == NL80211_IFTYPE_AP &&
 	    type == NL80211_IFTYPE_STATION) {
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+		if (dfs_priv && dfs_priv->radar_background) {
+			PRINTM(MMSG, "Cancel background radar detection\n");
+			woal_11h_cancel_chan_report_ioctl(dfs_priv,
+							  MOAL_IOCTL_WAIT);
+			dfs_priv->chan_rpt_pending = MFALSE;
+			dfs_priv->radar_background = MFALSE;
+			woal_update_channels_dfs_state(
+				dfs_priv, dfs_priv->chan_rpt_req.chanNum,
+				dfs_priv->chan_rpt_req.bandcfg.chanWidth,
+				DFS_USABLE);
+			memset(&dfs_priv->chan_rpt_req, 0,
+			       sizeof(mlan_ds_11h_chan_rep_req));
+			cfg80211_background_cac_abort(wiphy);
+		}
+#endif
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 12, 0)
 		if (priv->phandle->is_cac_timer_set &&
 		    priv->bss_index == priv->phandle->cac_bss_index) {
@@ -2685,6 +2718,10 @@ static int woal_mgmt_tx(moal_private *priv, const u8 *buf, size_t len,
 	t_u8 tx_seq_num = 0;
 	mlan_ioctl_req *ioctl_req = NULL;
 	mlan_ds_misc_cfg *misc = NULL;
+	t_u8 *new_ie = NULL;
+	t_u8 new_ie_len = 0;
+	t_u16 fc, type, stype;
+	t_u8 skipped_len = 0;
 
 	ENTER();
 
@@ -2695,7 +2732,32 @@ static int woal_mgmt_tx(moal_private *priv, const u8 *buf, size_t len,
 
 	/* pkt_type + tx_control */
 #define HEADER_SIZE 8
-	packet_len = (t_u16)(len + MLAN_MAC_ADDR_LENGTH);
+	if (!woal_secure_add(&len, MLAN_MAC_ADDR_LENGTH, &packet_len,
+			     TYPE_UINT16)) {
+		PRINTM(MERROR, "packet_len is invalid\n");
+	}
+
+	/* Remove 11ax IEs and reduce IE length if band support disabled
+	 * and assoc response includes 11ax IEs
+	 */
+	if (chan && ((chan->band == NL80211_BAND_2GHZ &&
+		      !(priv->phandle->fw_bands & BAND_GAX)) ||
+		     (chan->band == NL80211_BAND_5GHZ &&
+		      !(priv->phandle->fw_bands & BAND_AAX)))) {
+		fc = le16_to_cpu(((struct ieee80211_mgmt *)buf)->frame_control);
+		type = fc & IEEE80211_FCTL_FTYPE;
+		stype = fc & IEEE80211_FCTL_STYPE;
+		if ((type == IEEE80211_FTYPE_MGMT &&
+		     (stype == IEEE80211_STYPE_ASSOC_RESP ||
+		      stype == IEEE80211_STYPE_REASSOC_RESP))) {
+			new_ie = woal_remove_11ax_ies(priv, (t_u8 *)buf, len,
+						      &new_ie_len, MAX_IE_SIZE,
+						      &skipped_len);
+		}
+	}
+
+	if (new_ie && skipped_len)
+		packet_len -= skipped_len;
 
 	if (priv->phandle->cmd_tx_data) {
 		ioctl_req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_misc_cfg));
@@ -2736,8 +2798,6 @@ static int woal_mgmt_tx(moal_private *priv, const u8 *buf, size_t len,
 	moal_memcpy_ext(priv->phandle, pbuf + sizeof(pkt_type), &tx_control,
 			sizeof(tx_control), remain_len);
 	remain_len -= sizeof(tx_control);
-	/* frmctl + durationid + addr1 + addr2 + addr3 + seqctl */
-#define PACKET_ADDR4_POS (2 + 2 + 6 + 6 + 6 + 2)
 	pkt_len = woal_cpu_to_le16(packet_len);
 	moal_memcpy_ext(priv->phandle, pbuf + HEADER_SIZE, &pkt_len,
 			sizeof(pkt_len), remain_len);
@@ -2750,11 +2810,22 @@ static int woal_mgmt_tx(moal_private *priv, const u8 *buf, size_t len,
 				PACKET_ADDR4_POS,
 			addr, MLAN_MAC_ADDR_LENGTH, remain_len);
 	remain_len -= MLAN_MAC_ADDR_LENGTH;
-	moal_memcpy_ext(priv->phandle,
-			pbuf + HEADER_SIZE + sizeof(packet_len) +
-				PACKET_ADDR4_POS + MLAN_MAC_ADDR_LENGTH,
-			buf + PACKET_ADDR4_POS, len - PACKET_ADDR4_POS,
-			remain_len);
+
+	if (!new_ie_len) {
+		// coverity[overrun:SUPPRESS]
+		moal_memcpy_ext(priv->phandle,
+				pbuf + HEADER_SIZE + sizeof(packet_len) +
+					PACKET_ADDR4_POS + MLAN_MAC_ADDR_LENGTH,
+				buf + PACKET_ADDR4_POS, len - PACKET_ADDR4_POS,
+				remain_len);
+	} else {
+		/* new IEs post cleanup of 11ax IEs received from kernel */
+		// coverity[overrun:SUPPRESS]
+		moal_memcpy_ext(priv->phandle,
+				pbuf + HEADER_SIZE + sizeof(packet_len) +
+					PACKET_ADDR4_POS + MLAN_MAC_ADDR_LENGTH,
+				new_ie, new_ie_len, remain_len);
+	}
 
 	DBG_HEXDUMP(MDAT_D, "Mgmt Tx", pbuf,
 		    HEADER_SIZE + packet_len + sizeof(packet_len));
@@ -2890,6 +2961,9 @@ done:
 				woal_remove_tx_info(priv, tx_info->tx_seq_num);
 		}
 	}
+
+	if (new_ie)
+		kfree(new_ie);
 
 	LEAVE();
 	return ret;
@@ -3461,10 +3535,21 @@ done:
 int woal_cfg80211_set_qos_map(struct wiphy *wiphy, struct net_device *dev,
 			      struct cfg80211_qos_map *qos_map)
 {
-	moal_private *priv = (moal_private *)woal_get_netdev_priv(dev);
+	moal_private *priv = NULL;
 	int i, j, ret = 0;
 
 	ENTER();
+	if (!dev) {
+		PRINTM(MERROR, "netdev pointer is NULL \n");
+		ret = -EINVAL;
+		goto done;
+	}
+	priv = (moal_private *)woal_get_netdev_priv(dev);
+	if (!priv) {
+		PRINTM(MERROR, "failed to retrieve netdev priv\n");
+		ret = -EINVAL;
+		goto done;
+	}
 	/**clear dscp map*/
 	if (!qos_map) {
 		memset(priv->dscp_map, 0xFF, sizeof(priv->dscp_map));
@@ -3501,7 +3586,7 @@ int woal_cfg80211_set_qos_map(struct wiphy *wiphy, struct net_device *dev,
 
 		qos_map_ie.ieee_hdr.element_id = QOS_MAPPING;
 		qos_map_ie.ieee_hdr.len =
-			2 * qos_map->num_des + sizeof(qos_map->up);
+			(t_u8)(2 * qos_map->num_des + sizeof(qos_map->up));
 		qos_map_ies_len =
 			qos_map_ie.ieee_hdr.len + sizeof(qos_map_ie.ieee_hdr);
 
@@ -3672,6 +3757,145 @@ static t_u8 woal_find_ie(const t_u8 *ie, int len, const t_u8 *spec_ie,
 	return MFALSE;
 }
 
+/*
+ * @brief  search for given IE
+ *
+ * @param ie             A pointer to IE
+ * @param ie_len         IE length
+ * @param eid            Element id to be searched
+ * @param ext_eid        Element extension id to be searched
+ *
+ * @return               true - success, false - otherwise
+ */
+static bool woal_search_ie(t_u8 *ie, t_u8 ie_len, t_u8 eid, t_u8 ext_eid)
+{
+	IEEEtypes_Header_t *pheader = NULL;
+	t_u8 *pos = NULL;
+	t_u8 ret_len = 0;
+	t_u8 ret = false;
+	t_u8 id = 0;
+
+	ENTER();
+
+	pos = (t_u8 *)ie;
+	ret_len = ie_len;
+	while (ret_len >= 2) {
+		pheader = (IEEEtypes_Header_t *)pos;
+		if ((t_u8)(pheader->len + sizeof(IEEEtypes_Header_t)) >
+		    ret_len) {
+			PRINTM(MMSG, "invalid IE length = %d left len %d\n",
+			       pheader->len, ret_len);
+			break;
+		}
+
+		if (ext_eid && pheader->element_id == ext_eid) {
+			id = *(pos + 2);
+			if (id == eid) {
+				ret = true;
+				break;
+			}
+		} else if (pheader->element_id == eid) {
+			ret = true;
+			break;
+		}
+
+		ret_len -= pheader->len + sizeof(IEEEtypes_Header_t);
+		pos += pheader->len + sizeof(IEEEtypes_Header_t);
+	}
+
+	LEAVE();
+	return ret;
+}
+
+/*
+ * @brief  remove 11ax IEs if band support is disabled
+ *
+ * @param priv           A pointer moal_private structure
+ * @param buf            Frame buffer
+ * @param len            Frame length
+ * @param new_ie         A pointer to newly generated IE
+ * @param new_ie_len     Length of newly generated IE
+ * @param skipped_len    Length of IEs removed
+ *
+ * @return               new ie buffer - success, NULL - otherwise
+ */
+static t_u8 *woal_remove_11ax_ies(moal_private *priv, t_u8 *ie, t_u8 len,
+				  t_u8 *new_ie_len, t_u32 ie_out_len,
+				  t_u8 *skipped_len)
+{
+	int left_len = 0;
+	const t_u8 *pos = NULL;
+	int length = 0;
+	t_u8 id = 0;
+	t_u8 ext_id = 0;
+
+	t_u8 *new_ie = NULL;
+	t_u8 min_ie_len = PACKET_ADDR4_POS + sizeof(IEEEtypes_CapInfo_t) +
+			  sizeof(IEEEtypes_StatusCode_t) +
+			  sizeof(IEEEtypes_AId_t);
+
+	/* search for 11ax IE in IE buffer */
+	if (!woal_search_ie(ie + min_ie_len, len - min_ie_len, HE_CAPABILITY,
+			    EXTENSION) &&
+	    !woal_search_ie(ie + min_ie_len, len - min_ie_len, HE_OPERATION,
+			    EXTENSION))
+		return NULL;
+
+	new_ie = kzalloc(len, GFP_KERNEL);
+	if (!new_ie) {
+		PRINTM(MERROR, "Failed to allocate memory for New IE\n");
+		return NULL;
+	}
+
+	/* copy fixed parameters of assoc response */
+	moal_memcpy_ext(priv->phandle, new_ie, ie + PACKET_ADDR4_POS,
+			sizeof(IEEEtypes_AssocRsp_t),
+			sizeof(IEEEtypes_AssocRsp_t));
+	*new_ie_len += sizeof(IEEEtypes_AssocRsp_t);
+
+	pos = ie + min_ie_len;
+	left_len = len - min_ie_len;
+
+	/* HE IE will be fileter out */
+	while (left_len >= 2) {
+		length = *(pos + 1);
+		id = *pos;
+
+		/* length exceeds remaining IE length */
+		if ((length + 2) > left_len)
+			break;
+
+		switch (id) {
+		case EXTENSION:
+			ext_id = *(pos + 2);
+			if (ext_id == HE_CAPABILITY || ext_id == HE_OPERATION ||
+			    ext_id == HE_6G_CAPABILITY) {
+				*skipped_len +=
+					length + sizeof(IEEEtypes_Header_t);
+				break;
+			}
+		// fall through
+		default:
+			if ((*new_ie_len + length + 2) < (int)ie_out_len) {
+				moal_memcpy_ext(priv->phandle,
+						new_ie + *new_ie_len, pos,
+						length + 2,
+						ie_out_len - *new_ie_len);
+				*new_ie_len += length + 2;
+			} else {
+				PRINTM(MERROR,
+				       "IE len exceeds, failed to copy %d IE\n",
+				       id);
+			}
+			break;
+		}
+		pos += (length + 2);
+		left_len -= (length + 2);
+	}
+
+	return new_ie;
+}
+
 /**
  * @brief Filter specific IE in ie buf
  *
@@ -3761,6 +3985,11 @@ static t_u16 woal_filter_beacon_ies(moal_private *priv, const t_u8 *ie,
 		case WAPI_IE:
 			break;
 		case EXTENSION:
+			/* skip 11ax, 6G if bands are not enabled */
+			if (!(priv->phandle->fw_bands & BAND_GAX) ||
+			    !(priv->phandle->fw_bands & BAND_AAX))
+				break;
+
 			ext_id = *(pos + 2);
 			if ((ext_id == HE_CAPABILITY || ext_id == HE_OPERATION)
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
@@ -3898,8 +4127,7 @@ static t_u16 woal_filter_beacon_ies(moal_private *priv, const t_u8 *ie,
 			}
 			break;
 		case REGULATORY_CLASS:
-			break;
-			// fall thru to default to add IE
+			/* FALLTHRU */
 		default:
 			if ((out_len + length + 2) < (int)ie_out_len) {
 				moal_memcpy_ext(priv->phandle, ie_out + out_len,
@@ -4729,8 +4957,12 @@ Note: bits not mentioned below are set to 0.
 ===
 HE MAC Cap:
 Bit0:  1  (+HTC HE Support)
+Bit1:	1 (TWT requester support)
+Bit2:	1 (TWT responder support)
+Bit20:	1 (Broadcast TWT support)
 Bit25: 1  (OM Control Support. But uAP does not support
 	   Tx OM received from the STA, as it does not support UL OFDMA)
+Bit28-27: Max. A-MPDU Length Exponent Extension
 
 HE PHY Cap:
 Bit1-7: 0x2 (Supported Channel Width Set.
@@ -4761,7 +4993,7 @@ Bit75: 0x1 (Rx 1024-QAM Support < 242-tone RU)
 #define UAP_HE_MAC_CAP0_MASK 0x06
 #define UAP_HE_MAC_CAP1_MASK 0x00
 #define UAP_HE_MAC_CAP2_MASK 0x10
-#define UAP_HE_MAC_CAP3_MASK 0x02
+#define UAP_HE_MAC_CAP3_MASK 0x1a
 #define UAP_HE_MAC_CAP4_MASK 0x00
 #define UAP_HE_MAC_CAP5_MASK 0x00
 #define UAP_HE_PHY_CAP0_MASK 0x04
@@ -4781,8 +5013,12 @@ Bit75: 0x1 (Rx 1024-QAM Support < 242-tone RU)
 ===
 HE MAC Cap:
 Bit0:   1  (+HTC HE Support)
+Bit1:	1 (TWT requester support)
+Bit2:	1 (TWT responder support)
+Bit20:	1 (Broadcast TWT support)
 Bit25: 1  (OM Control Support. Note: uAP does not support
 	Tx OM received from the STA, as it does not support UL OFDMA)
+Bit28-27: Max. A-MPDU Length Exponent Extension
 
 HE PHY Cap:
 Bit1-7: 0x1 (Supported Channel Width Set)
@@ -4807,10 +5043,10 @@ Bit58: 0x1 (HE SU PPDU and HE MU PPDU with 4xHE-LTF+0.8usGI)
 Bit59-61: 0x1 (Max Nc)
 Bit75: 0x1 (Rx 1024-QAM Support < 242-tone RU)
 */
-#define UAP_HE_2G_MAC_CAP0_MASK 0x00
+#define UAP_HE_2G_MAC_CAP0_MASK 0x06
 #define UAP_HE_2G_MAC_CAP1_MASK 0x00
-#define UAP_HE_2G_MAC_CAP2_MASK 0x00
-#define UAP_HE_2G_MAC_CAP3_MASK 0x02
+#define UAP_HE_2G_MAC_CAP2_MASK 0x10
+#define UAP_HE_2G_MAC_CAP3_MASK 0x1a
 #define UAP_HE_2G_MAC_CAP4_MASK 0x00
 #define UAP_HE_2G_MAC_CAP5_MASK 0x00
 #define UAP_HE_2G_PHY_CAP0_MASK 0x02
@@ -4892,16 +5128,17 @@ void woal_cfg80211_setup_he_cap(moal_private *priv,
 	t_u8 extra_mcs_size = 0;
 	int ppe_threshold_len = 0;
 	mlan_ds_11ax_he_capa *phe_cap = NULL;
-	t_u8 hw_hecap_len;
+	t_u8 hw_hecap_len = 0;
 
 	memset(&fw_info, 0, sizeof(mlan_fw_info));
 
 	woal_request_get_fw_info(priv, MOAL_IOCTL_WAIT, &fw_info);
-	if (band->band == NL80211_BAND_5GHZ) {
+	if (band->band == NL80211_BAND_5GHZ && fw_info.fw_bands & BAND_AAX) {
 		phe_cap = (mlan_ds_11ax_he_capa *)fw_info.hw_he_cap;
 		hw_hecap_len = fw_info.hw_hecap_len;
 		woal_uap_update_11ax_ie(BAND_5GHZ, phe_cap);
-	} else {
+	} else if (band->band == NL80211_BAND_2GHZ &&
+		   fw_info.fw_bands & BAND_GAX) {
 		phe_cap = (mlan_ds_11ax_he_capa *)fw_info.hw_2g_he_cap;
 		hw_hecap_len = fw_info.hw_2g_hecap_len;
 		woal_uap_update_11ax_ie(BAND_2GHZ, phe_cap);

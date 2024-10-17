@@ -614,6 +614,43 @@ static t_u8 woal_check_11ax_capability(moal_private *priv, t_u8 band,
 }
 #endif
 
+#if KERNEL_VERSION(4, 20, 0) <= CFG80211_VERSION_CODE
+/**
+ * @brief check channel width with HE capabilities
+ * @param priv            A pointer to moal private structure
+ * @param chandef         A pointer to cfg80211_chan_def structure
+ * @return                0 -- channel width supported, otherwise not supported
+ */
+static t_u8 woal_check_chan_width_capa(moal_private *priv,
+				       struct cfg80211_chan_def *chandef)
+{
+	mlan_fw_info fw_info;
+	mlan_ds_11ax_he_capa *phe_cap = NULL;
+	ENTER();
+	memset(&fw_info, 0, sizeof(mlan_fw_info));
+	woal_request_get_fw_info(priv, MOAL_IOCTL_WAIT, &fw_info);
+	if (chandef->chan->band == NL80211_BAND_5GHZ) {
+		phe_cap = (mlan_ds_11ax_he_capa *)fw_info.hw_he_cap;
+		if (((chandef->width == NL80211_CHAN_WIDTH_160) &&
+		     (!(phe_cap->he_phy_cap[0] & MBIT(3)))) ||
+		    ((chandef->width == NL80211_CHAN_WIDTH_80P80) &&
+		     (!(phe_cap->he_phy_cap[0] & MBIT(4))))) {
+			PRINTM(MCMND, "FW don't support %s in %s band",
+			       (chandef->width == NL80211_CHAN_WIDTH_160) ?
+				       "160MHz" :
+				       "80+80 MHz",
+			       (chandef->chan->band == NL80211_BAND_5GHZ) ?
+				       "5G" :
+				       "6G");
+			LEAVE();
+			return MFALSE;
+		}
+	}
+	LEAVE();
+	return MTRUE;
+}
+#endif
+
 /**
  * @brief get ht_cap from beacon ie
  *
@@ -992,6 +1029,13 @@ static int woal_cfg80211_beacon_config(moal_private *priv,
 	/** back up ap's channel */
 	moal_memcpy_ext(priv->phandle, &priv->chan, &params->chandef,
 			sizeof(struct cfg80211_chan_def), sizeof(priv->chan));
+#endif
+
+#if KERNEL_VERSION(4, 20, 0) <= CFG80211_VERSION_CODE
+	if (!woal_check_chan_width_capa(priv, &params->chandef)) {
+		ret = -EFAULT;
+		goto done;
+	}
 #endif
 
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 12, 0)
@@ -1467,6 +1511,11 @@ static int woal_cfg80211_beacon_config(moal_private *priv,
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(4, 20, 0)
 		hecap_ie = (IEEEtypes_HECap_t *)woal_parse_ext_ie_tlv(
 			ie, ie_len, HE_CAPABILITY);
+#if CFG80211_VERSION_CODE > KERNEL_VERSION(5, 3, 0)
+		if (params->twt_responder == MFALSE) {
+			hecap_ie->he_mac_cap[0] &= ~HE_MAC_CAP_TWT_RESP_SUPPORT;
+		}
+#endif
 #endif
 		woal_uap_set_11ax_status(priv, MLAN_ACT_ENABLE,
 					 sys_config->bandcfg.chanBand,
@@ -1828,6 +1877,9 @@ static int woal_cfg80211_add_vlan_vir_if(struct wiphy *wiphy,
 	new_priv->bss_index = priv->bss_index;
 	new_priv->parent_priv = priv;
 	new_priv->wdev->iftype = NL80211_IFTYPE_AP_VLAN;
+	new_priv->max_tx_pending = MAX_TX_PENDING;
+	new_priv->low_tx_pending = LOW_TX_PENDING;
+	skb_queue_head_init(&new_priv->tx_q);
 
 	ndev->ieee80211_ptr->use_4addr = params->use_4addr;
 
@@ -1849,6 +1901,17 @@ static int woal_cfg80211_add_vlan_vir_if(struct wiphy *wiphy,
 
 	if (new_dev)
 		*new_dev = ndev;
+
+	if (ndev->ieee80211_ptr->use_4addr && !priv->multi_ap_flag) {
+		/* Supports backhaul and fronthaul BSS and enable four_address
+		 * flag */
+		if (MLAN_STATUS_SUCCESS ==
+		    woal_multi_ap_cfg(priv, MOAL_IOCTL_WAIT,
+				      EASY_MESH_MULTI_AP_BH_AND_FH_BSS)) {
+			priv->multi_ap_flag = EASY_MESH_MULTI_AP_BH_AND_FH_BSS;
+		}
+	}
+
 fail:
 	LEAVE();
 	return ret;
@@ -3051,6 +3114,10 @@ int woal_cfg80211_del_beacon(struct wiphy *wiphy, struct net_device *dev)
 #ifdef STA_SUPPORT
 	moal_private *pmpriv = NULL;
 #endif
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+	moal_private *dfs_priv =
+		woal_get_priv_bss_type(priv->phandle, MLAN_BSS_TYPE_DFS);
+#endif
 
 	ENTER();
 
@@ -3075,6 +3142,21 @@ int woal_cfg80211_del_beacon(struct wiphy *wiphy, struct net_device *dev)
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 	if (moal_extflg_isset(priv->phandle, EXT_DFS_OFFLOAD))
 		woal_cancel_cac_block(priv);
+#endif
+
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 17, 0)
+	if (dfs_priv && dfs_priv->radar_background) {
+		PRINTM(MMSG, "Cancel background radar detection\n");
+		woal_11h_cancel_chan_report_ioctl(dfs_priv, MOAL_IOCTL_WAIT);
+		dfs_priv->chan_rpt_pending = MFALSE;
+		dfs_priv->radar_background = MFALSE;
+		woal_update_channels_dfs_state(
+			dfs_priv, dfs_priv->chan_rpt_req.chanNum,
+			dfs_priv->chan_rpt_req.bandcfg.chanWidth, DFS_USABLE);
+		memset(&dfs_priv->chan_rpt_req, 0,
+		       sizeof(mlan_ds_11h_chan_rep_req));
+		cfg80211_background_cac_abort(priv->phandle->wiphy);
+	}
 #endif
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 12, 0)
 	memset(&priv->chan, 0, sizeof(struct cfg80211_chan_def));
@@ -3136,6 +3218,7 @@ int woal_cfg80211_del_beacon(struct wiphy *wiphy, struct net_device *dev)
 	memset(priv->uap_wep_key, 0, sizeof(priv->uap_wep_key));
 	priv->channel = 0;
 	priv->bandwidth = 0;
+	priv->multi_ap_flag = 0;
 
 	PRINTM(MMSG, "wlan: %s AP stopped\n", dev->name);
 done:
@@ -3692,6 +3775,9 @@ int woal_cfg80211_set_radar_background(struct wiphy *wiphy,
 		woal_11h_cancel_chan_report_ioctl(priv, MOAL_IOCTL_WAIT);
 		priv->chan_rpt_pending = MFALSE;
 		priv->radar_background = MFALSE;
+		woal_update_channels_dfs_state(
+			priv, priv->chan_rpt_req.chanNum,
+			priv->chan_rpt_req.bandcfg.chanWidth, DFS_USABLE);
 		memset(&priv->chan_rpt_req, 0,
 		       sizeof(mlan_ds_11h_chan_rep_req));
 		LEAVE();

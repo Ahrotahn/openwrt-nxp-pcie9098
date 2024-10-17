@@ -94,7 +94,12 @@ Change log:
 #ifdef PCIEAW693
 #define PCIEUARTAW693_DEFAULT_COMBO_FW_NAME "nxp/pcieuartaw693_combo.bin"
 #define PCIEAW693_DEFAULT_COMBO_FW_NAME "nxp/pcieuartaw693_combo.bin"
+#define PCIEUARTAW693_COMBO_V1_FW_NAME "nxp/pcieuartaw693_combo_v1.bin.se"
+#define PCIEAW693_COMBO_V1_FW_NAME "nxp/pcieuartaw693_combo_v1.bin.se"
 #define PCIEAW693_DEFAULT_WLAN_FW_NAME "nxp/pcieaw693_wlan.bin"
+#define PCIEAW693_WLAN_V1_FW_NAME "nxp/pcieaw693_wlan_v1.bin.se"
+#define PCIEAW693_A0 0x00
+#define PCIEAW693_A1 0x01
 #endif /* PCIEAW693*/
 
 #ifdef PCIE9098

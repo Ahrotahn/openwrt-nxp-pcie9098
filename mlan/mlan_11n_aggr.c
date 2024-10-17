@@ -187,6 +187,9 @@ static t_u16 wlan_form_amsdu_txpd(mlan_private *priv, mlan_buffer *pmbuf,
 
 	head_ptr = pmbuf->pbuf + pmbuf->data_offset - Tx_PD_SIZEOF(pmadapter) -
 		   priv->intf_hr_len;
+	/*making data buffer 8 ytes aligned for increasing TP with PCIE Scatter
+	 * Gather*/
+	head_ptr = (t_u8 *)((t_ptr)head_ptr & ~((t_ptr)(8 - 1)));
 	ptx_pd = (TxPD *)(head_ptr + priv->intf_hr_len);
 	// coverity[bad_memset:SUPPRESS]
 	memset(pmadapter, ptx_pd, 0, Tx_PD_SIZEOF(pmadapter));
@@ -675,6 +678,8 @@ static int wlan_send_amsdu_subframe_list(mlan_private *priv,
 		goto exit;
 	}
 
+	wlan_wmm_consume_mpdu_budget(pra_list);
+
 	while (pmbuf_src &&
 	       ((pkt_size + (pmbuf_src->data_len + LLC_SNAP_LEN) + headroom) <=
 		max_amsdu_size) &&
@@ -683,6 +688,7 @@ static int wlan_send_amsdu_subframe_list(mlan_private *priv,
 			(pmlan_buffer)util_dequeue_list(pmadapter->pmoal_handle,
 							&pra_list->buf_head,
 							MNULL, MNULL);
+		wlan_wmm_consume_byte_budget(pra_list, pmbuf_src);
 		/* Collects TP statistics */
 		if (pmadapter->tp_state_on &&
 		    (pkt_size > Tx_PD_SIZEOF(pmadapter)))
@@ -728,7 +734,13 @@ static int wlan_send_amsdu_subframe_list(mlan_private *priv,
 
 	pmadapter->callbacks.moal_spin_unlock(pmadapter->pmoal_handle,
 					      priv->wmm.ra_list_spinlock);
-
+	if (!pmbuf_last) {
+		PRINTM(MERROR,
+		       "SG_AGGR ERROR: pkt_size=%d max_msdu_count=%d max_amsdu_size=%d msdu_in_tx_amsdu_cnt=%d\n",
+		       pkt_size, max_msdu_count, max_amsdu_size,
+		       msdu_in_tx_amsdu_cnt);
+		goto exit;
+	}
 	/* Last AMSDU packet does not need padding */
 	pkt_size -= pad;
 	pmbuf_last->data_len -= pad;
@@ -758,9 +770,8 @@ static int wlan_send_amsdu_subframe_list(mlan_private *priv,
 			priv->wmm.packets_out[ptrindex]++;
 			priv->wmm.tid_tbl_ptr[ptrindex].ra_list_curr = pra_list;
 		}
-		pmadapter->bssprio_tbl[priv->bss_priority].bssprio_cur =
-			pmadapter->bssprio_tbl[priv->bss_priority]
-				.bssprio_cur->pnext;
+		wlan_advance_bss_on_pkt_push(
+			pmadapter, &pmadapter->bssprio_tbl[priv->bss_priority]);
 		pmadapter->callbacks.moal_spin_unlock(
 			pmadapter->pmoal_handle, priv->wmm.ra_list_spinlock);
 	}
@@ -865,12 +876,15 @@ int wlan_11n_aggregate_pkt(mlan_private *priv, raListTbl *pra_list,
 		goto exit;
 	}
 
+	wlan_wmm_consume_mpdu_budget(pra_list);
+
 	while (pmbuf_src && ((pkt_size + (pmbuf_src->data_len + LLC_SNAP_LEN) +
 			      headroom) <= max_amsdu_size)) {
 		pmbuf_src =
 			(pmlan_buffer)util_dequeue_list(pmadapter->pmoal_handle,
 							&pra_list->buf_head,
 							MNULL, MNULL);
+		wlan_wmm_consume_byte_budget(pra_list, pmbuf_src);
 		/* Collects TP statistics */
 		if (pmadapter->tp_state_on &&
 		    (pkt_size > Tx_PD_SIZEOF(pmadapter)))
@@ -1011,9 +1025,10 @@ int wlan_11n_aggregate_pkt(mlan_private *priv, raListTbl *pra_list,
 			priv->wmm.packets_out[ptrindex]++;
 			priv->wmm.tid_tbl_ptr[ptrindex].ra_list_curr = pra_list;
 		}
-		pmadapter->bssprio_tbl[priv->bss_priority].bssprio_cur =
-			pmadapter->bssprio_tbl[priv->bss_priority]
-				.bssprio_cur->pnext;
+
+		wlan_advance_bss_on_pkt_push(
+			pmadapter, &pmadapter->bssprio_tbl[priv->bss_priority]);
+
 		pmadapter->callbacks.moal_spin_unlock(
 			pmadapter->pmoal_handle, priv->wmm.ra_list_spinlock);
 	}

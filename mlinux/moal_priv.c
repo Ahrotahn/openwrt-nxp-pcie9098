@@ -124,11 +124,9 @@ static int woal_associate_ssid_bssid(moal_private *priv, struct iwreq *wrq)
 		if (buf[i] == ':') {
 			mac_idx++;
 		} else {
-			if (mac_idx < ETH_ALEN) {
-				// coverity[tainted_data: SUPPRESS]
+			if (mac_idx < ETH_ALEN)
 				ssid_bssid->bssid[mac_idx] =
 					(t_u8)woal_atox(buf + i);
-			}
 
 			while ((i < buflen) && (isxdigit(buf[i + 1]))) {
 				/* Skip entire hex value */
@@ -2753,6 +2751,8 @@ static int woal_drv_dbg(moal_private *priv, struct iwreq *wrq)
 	       (drvdbg & MCMD_D) ? "X" : "");
 	printk(KERN_ALERT "MDAT_D (%08x) %s\n", MDAT_D,
 	       (drvdbg & MDAT_D) ? "X" : "");
+	printk(KERN_ALERT "MREG   (%08x) %s\n", MREG,
+	       (drvdbg & MREG) ? "X" : "");
 	printk(KERN_ALERT "MREG_D (%08x) %s\n", MREG_D,
 	       (drvdbg & MREG_D) ? "X" : "");
 	printk(KERN_ALERT "MIOCTL (%08x) %s\n", MIOCTL,
@@ -2951,6 +2951,94 @@ static int woal_sleep_pd(moal_private *priv, struct iwreq *wrq)
 			goto done;
 		}
 		wrq->u.data.length = 1;
+	}
+
+done:
+	if (status != MLAN_STATUS_PENDING)
+		kfree(req);
+	LEAVE();
+	return ret;
+}
+
+/**
+ * @brief Set/Get module configuration
+ *
+ * @param priv     A pointer to moal_private structure
+ * @param wrq      A pointer to iwreq structure
+ *
+ * @return         0 --success, otherwise fail
+ */
+static int woal_fw_wakeup_method(moal_private *priv, struct iwreq *wrq)
+{
+	int ret = 0, data[2];
+	mlan_ds_pm_cfg *pm_cfg = NULL;
+	mlan_ioctl_req *req = NULL;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+
+	ENTER();
+
+	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_pm_cfg));
+	if (req == NULL) {
+		ret = -ENOMEM;
+		goto done;
+	}
+	pm_cfg = (mlan_ds_pm_cfg *)req->pbuf;
+
+	if (wrq->u.data.length > 2) {
+		ret = -EINVAL;
+		goto done;
+	}
+	if (!wrq->u.data.length) {
+		req->action = MLAN_ACT_GET;
+	} else {
+		req->action = MLAN_ACT_SET;
+		if (copy_from_user(data, wrq->u.data.pointer,
+				   sizeof(int) * wrq->u.data.length)) {
+			PRINTM(MINFO, "Copy from user failed\n");
+			ret = -EFAULT;
+			goto done;
+		}
+		if (data[0] != FW_WAKEUP_METHOD_INTERFACE &&
+		    data[0] != FW_WAKEUP_METHOD_GPIO) {
+			PRINTM(MERROR, "Invalid FW wake up method:%d\n",
+			       data[0]);
+			ret = -EINVAL;
+			goto done;
+		}
+		if (data[0] == FW_WAKEUP_METHOD_GPIO) {
+			if (wrq->u.data.length == 1) {
+				PRINTM(MERROR,
+				       "Please provide gpio pin number for FW_WAKEUP_METHOD gpio\n");
+				ret = -EINVAL;
+				goto done;
+			}
+			pm_cfg->param.fw_wakeup_params.gpio_pin = data[1];
+		}
+
+		pm_cfg->param.fw_wakeup_params.method = data[0];
+	}
+
+	pm_cfg->sub_command = MLAN_OID_PM_CFG_FW_WAKEUP_METHOD;
+	req->req_id = MLAN_IOCTL_PM_CFG;
+
+	status = woal_request_ioctl(priv, req, MOAL_IOCTL_WAIT);
+	if (status != MLAN_STATUS_SUCCESS) {
+		ret = -EFAULT;
+		goto done;
+	}
+
+	data[0] = ((mlan_ds_pm_cfg *)req->pbuf)->param.fw_wakeup_params.method;
+	data[1] =
+		((mlan_ds_pm_cfg *)req->pbuf)->param.fw_wakeup_params.gpio_pin;
+
+	if (data[0] == FW_WAKEUP_METHOD_INTERFACE)
+		wrq->u.data.length = 1;
+	else
+		wrq->u.data.length = 2;
+	if (copy_to_user(wrq->u.data.pointer, data,
+			 sizeof(int) * wrq->u.data.length)) {
+		ret = -EFAULT;
+		goto done;
 	}
 
 done:
@@ -6372,7 +6460,15 @@ static int woal_set_get_tx_rx_ant(moal_private *priv, struct iwreq *wrq)
 
 		if (priv->phandle->feature_control & FEATURE_CTRL_STREAM_2X2) {
 			radio->param.ant_cfg.tx_antenna = data[0];
-			radio->param.ant_cfg.rx_antenna = data[0];
+			if (data[0] == RF_ANTENNA_AUTO) {
+				radio->param.ant_cfg.rx_antenna = 0;
+				if (data[1] > 0xffff) {
+					ret = -EINVAL;
+					goto done;
+				}
+			} else {
+				radio->param.ant_cfg.rx_antenna = data[0];
+			}
 			if (wrq->u.data.length == 2)
 				radio->param.ant_cfg.rx_antenna = data[1];
 		} else {
@@ -6614,6 +6710,9 @@ int woal_wext_do_ioctl(struct net_device *dev, struct ifreq *req, int cmd)
 #endif
 		case WOAL_SLEEP_PD:
 			ret = woal_sleep_pd(priv, wrq);
+			break;
+		case WOAL_FW_WAKEUP_METHOD:
+			ret = woal_fw_wakeup_method(priv, wrq);
 			break;
 		case WOAL_AUTH_TYPE:
 			ret = woal_auth_type(priv, wrq);

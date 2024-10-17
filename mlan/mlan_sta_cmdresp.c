@@ -754,6 +754,8 @@ static mlan_status wlan_ret_get_log(pmlan_private pmpriv,
 			wlan_le32_to_cpu(pget_log->gdma_abort_cnt);
 		pget_info->param.stats.g_reset_rx_mac_cnt =
 			wlan_le32_to_cpu(pget_log->g_reset_rx_mac_cnt);
+		pget_info->param.stats.SdmaStuckCnt =
+			wlan_le32_to_cpu(pget_log->SdmaStuckCnt);
 		// Ownership error counters
 		pget_info->param.stats.dwCtlErrCnt =
 			wlan_le32_to_cpu(pget_log->dwCtlErrCnt);
@@ -1825,7 +1827,7 @@ static mlan_status wlan_ret_tdls_config(pmlan_private pmpriv,
 				wlan_le16_to_cpu(link_ptr->data_rssi_avg);
 			link_ptr->data_nf_avg =
 				wlan_le16_to_cpu(link_ptr->data_nf_avg);
-			link_length = sizeof(tdls_each_link_status) - 1;
+			link_length = sizeof(tdls_each_link_status);
 			/* adjust as per open or secure network */
 			if (link_ptr->link_flags & 0x02) {
 				link_ptr->key_lifetime = wlan_le32_to_cpu(
@@ -3037,6 +3039,40 @@ static mlan_status wlan_ret_mfg_otp_rw(pmlan_private pmpriv,
 }
 
 /**
+ *  @brief This function prepares command resp of MFG CMD OTP CAL DATA RW
+ *
+ *  @param pmpriv       A pointer to mlan_private structure
+ *  @param resp         A pointer to HostCmd_DS_COMMAND
+ *  @param pioctl_buf   A pointer to mlan_ioctl_req structure
+ *
+ *  @return             MLAN_STATUS_SUCCESS
+ */
+
+static mlan_status wlan_ret_mfg_otp_cal_data_rw(pmlan_private pmpriv,
+						HostCmd_DS_COMMAND *resp,
+						mlan_ioctl_req *pioctl_buf)
+{
+	mlan_ds_misc_cfg *misc = MNULL;
+	mfg_cmd_otp_cal_data_rd_wr_t *cfg = MNULL;
+	mfg_cmd_otp_cal_data_rd_wr_t *mcmd =
+		(mfg_cmd_otp_cal_data_rd_wr_t *)&resp->params
+			.mfg_otp_cal_data_rd_wr;
+
+	ENTER();
+	if (!pioctl_buf) {
+		LEAVE();
+		return MLAN_STATUS_FAILURE;
+	}
+	misc = (mlan_ds_misc_cfg *)pioctl_buf->pbuf;
+	cfg = (mfg_cmd_otp_cal_data_rd_wr_t *)&misc->param
+		      .mfg_otp_cal_data_rd_wr;
+	memcpy_ext(pmpriv->adapter, &(cfg->cal_data[0]), &(mcmd->cal_data[0]),
+		   cfg->cal_data_len, cfg->cal_data_len);
+	LEAVE();
+	return MLAN_STATUS_SUCCESS;
+}
+
+/**
  *  @brief This function prepares command resp of MFG Cmd
  *
  *  @param pmpriv       A pointer to mlan_private structure
@@ -3078,6 +3114,9 @@ mlan_status wlan_ret_mfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *resp,
 	case MFG_CMD_OTP_MAC_ADD:
 		ret = wlan_ret_mfg_otp_rw(pmpriv, resp, pioctl_buf);
 		goto cmd_mfg_done;
+	case MFG_CMD_OTP_CAL_DATA:
+		ret = wlan_ret_mfg_otp_cal_data_rw(pmpriv, resp, pioctl_buf);
+		goto cmd_mfg_done;
 	case MFG_CMD_SET_TEST_MODE:
 	case MFG_CMD_UNSET_TEST_MODE:
 	case MFG_CMD_TX_ANT:
@@ -3100,7 +3139,8 @@ mlan_status wlan_ret_mfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *resp,
 	card_type = card_type & 0xff;
 	if (((card_type == CARD_TYPE_9098) || (card_type == CARD_TYPE_9097) ||
 	     (card_type == CARD_TYPE_9177) || (card_type == CARD_TYPE_IW624) ||
-	     (card_type == CARD_TYPE_AW693)) &&
+	     (card_type == CARD_TYPE_AW693) ||
+	     (card_type == CARD_TYPE_IW610)) &&
 	    (wlan_le32_to_cpu(mcmd->mfg_cmd) == MFG_CMD_RFPWR)) {
 		//! TX_POWER was multipied by 16 while passing to fw
 		//! So It is needed to divide by 16 for user vals understanding.
@@ -3112,6 +3152,9 @@ mlan_status wlan_ret_mfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *resp,
 	cfg->data2 = wlan_le32_to_cpu(mcmd->data2);
 	cfg->data3 = wlan_le32_to_cpu(mcmd->data3);
 cmd_mfg_done:
+	if (mcmd->error)
+		PRINTM(MERROR, "RFTM_COMMAND ERROR: 0x%08x\n",
+		       wlan_le32_to_cpu(mcmd->error));
 	LEAVE();
 	return ret;
 }
@@ -3144,6 +3187,47 @@ mlan_status wlan_ret_twt_report(pmlan_private pmpriv, HostCmd_DS_COMMAND *resp,
 				   sizeof(mlan_ds_twt_report),
 				   sizeof(mlan_ds_twt_report));
 		}
+	}
+	LEAVE();
+	return MLAN_STATUS_SUCCESS;
+}
+
+/**
+ *  @brief This function handles the command response of auth assoc timeout cfg
+ *
+ *  @param pmpriv       A pointer to mlan_private structure
+ *  @param resp         A pointer to HostCmd_DS_COMMAND
+ *  @param pioctl_buf   A pointer to mlan_ioctl_req structure
+ *
+ *  @return             MLAN_STATUS_SUCCESS
+ */
+mlan_status wlan_ret_auth_assoc_timeout_cfg(pmlan_private pmpriv,
+					    HostCmd_DS_COMMAND *resp,
+					    mlan_ioctl_req *pioctl_buf)
+{
+	HostCmd_DS_AUTH_ASSOC_TIMEOUT_CFG *auth_assoc_cmd =
+		(HostCmd_DS_AUTH_ASSOC_TIMEOUT_CFG *)&resp->params
+			.auth_assoc_cfg;
+	mlan_ds_misc_cfg *misc_cfg = MNULL;
+
+	ENTER();
+
+	if (pioctl_buf) {
+		misc_cfg = (mlan_ds_misc_cfg *)pioctl_buf->pbuf;
+		misc_cfg->param.auth_assoc_cfg.auth_timeout =
+			wlan_le16_to_cpu(auth_assoc_cmd->auth_timeout);
+		misc_cfg->param.auth_assoc_cfg.auth_retry_timeout_if_ack =
+			wlan_le16_to_cpu(
+				auth_assoc_cmd->auth_retry_timeout_if_ack);
+		misc_cfg->param.auth_assoc_cfg.auth_retry_timeout_if_no_ack =
+			wlan_le16_to_cpu(
+				auth_assoc_cmd->auth_retry_timeout_if_no_ack);
+		misc_cfg->param.auth_assoc_cfg.assoc_timeout =
+			wlan_le16_to_cpu(auth_assoc_cmd->assoc_timeout);
+		misc_cfg->param.auth_assoc_cfg.reassoc_timeout =
+			wlan_le16_to_cpu(auth_assoc_cmd->reassoc_timeout);
+		misc_cfg->param.auth_assoc_cfg.retry_timeout =
+			wlan_le16_to_cpu(auth_assoc_cmd->retry_timeout);
 	}
 	LEAVE();
 	return MLAN_STATUS_SUCCESS;
@@ -3242,6 +3326,9 @@ mlan_status wlan_ops_sta_process_cmdresp(t_void *priv, t_u16 cmdresp_no,
 		break;
 	case HostCmd_CMD_802_11_SLEEP_PARAMS:
 		ret = wlan_ret_802_11_sleep_params(pmpriv, resp, pioctl_buf);
+		break;
+	case HostCmd_CMD_802_11_FW_WAKE_METHOD:
+		ret = wlan_ret_fw_wakeup_method(pmpriv, resp, pioctl_buf);
 		break;
 	case HostCmd_CMD_802_11_ROBUSTCOEX:
 		break;
@@ -3488,6 +3575,12 @@ mlan_status wlan_ops_sta_process_cmdresp(t_void *priv, t_u16 cmdresp_no,
 		break;
 #endif
 #endif
+#if defined(PCIE)
+	case HostCmd_CMD_PCIE_ADMA_INIT:
+		PRINTM(MINFO, "PCIE ADMA init successful.\n");
+		wlan_pcie_init_fw(pmpriv->adapter);
+		break;
+#endif
 	case HostCmd_CMD_802_11_REMAIN_ON_CHANNEL:
 		ret = wlan_ret_remain_on_channel(pmpriv, resp, pioctl_buf);
 		break;
@@ -3651,9 +3744,20 @@ mlan_status wlan_ops_sta_process_cmdresp(t_void *priv, t_u16 cmdresp_no,
 	case HostCmd_CMD_CROSS_CHIP_SYNCH:
 		ret = wlan_ret_cross_chip_synch(pmpriv, resp, pioctl_buf);
 		break;
+	case HostCmd_CMD_TSP_CFG:
+		ret = wlan_ret_tsp_config(pmpriv, resp, pioctl_buf);
+		break;
 	case HostCmd_CMD_802_11_TX_FRAME:
 		break;
 	case HostCmd_CMD_EDMAC_CFG:
+		break;
+	case HostCmd_CMD_PEER_TX_RATE_QUERY:
+		ret = wlan_ret_sta_tx_rate(pmpriv, resp, pioctl_buf);
+		break;
+	case HostCmd_CMD_MCLIENT_SCHEDULE_CFG:
+		break;
+	case HostCmd_CMD_AUTH_ASSOC_TIMEOUT_CFG:
+		ret = wlan_ret_auth_assoc_timeout_cfg(pmpriv, resp, pioctl_buf);
 		break;
 	default:
 		PRINTM(MERROR, "CMD_RESP: Unknown command response %#x\n",

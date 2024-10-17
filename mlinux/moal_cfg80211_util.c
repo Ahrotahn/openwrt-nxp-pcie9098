@@ -2891,6 +2891,659 @@ int woal_deinit_wifi_hal(moal_private *priv)
 }
 
 /**
+ * @brief Prints the scancfg params from the mlan_ds_scan struct
+ *
+ * @param scan	A pointer to mlan_ds_scan struct
+ *
+ * @return      void
+ */
+static void woal_print_scancfg_params(mlan_ds_scan *scan)
+{
+	if (!scan)
+		return;
+	PRINTM(MCMND,
+	       "scancfg params: scan_type = 0x%x, scan_mode = 0x%x, scan_probe = 0x%x \n",
+	       scan->param.scan_cfg.scan_type, scan->param.scan_cfg.scan_mode,
+	       scan->param.scan_cfg.scan_probe);
+
+	PRINTM(MCMND, "scancfg params: passive_to_active_scan = 0x%x \n",
+	       scan->param.scan_cfg.passive_to_active_scan);
+
+	PRINTM(MCMND,
+	       "scancfg params: specific_scan_time = 0x%x, active_scan_time = 0x%x, passive_scan_time = 0x%x \n",
+	       scan->param.scan_cfg.scan_time.specific_scan_time,
+	       scan->param.scan_cfg.scan_time.active_scan_time,
+	       scan->param.scan_cfg.scan_time.passive_scan_time);
+
+	PRINTM(MCMND, "scancfg params: ext_scan = 0x%x\n",
+	       scan->param.scan_cfg.ext_scan);
+	PRINTM(MCMND, "scancfg params: scan_chan_gap = 0x%x\n",
+	       scan->param.scan_cfg.scan_chan_gap);
+}
+
+/**
+ * @brief Parse the vendor cmd input data based on attribute len
+ * 	  and copy each attrubute into a output buffer/integer array
+ *
+ * @param data			A pointer to input data buffer
+ * @param data_len		Input data buffer total len
+ * @param user_buff		A pointer to output data buffer after the
+ * parsing
+ * @param buff_len		Maximum no. of data attributes to be parsed
+ * @param user_data_len		No. of data attributes that are parsed
+ *
+ * @return      0: success  -1: fail
+ */
+static int woal_parse_vendor_cmd_attributes(t_u8 *data, t_u32 data_len,
+					    t_u32 *user_buff, t_u32 buff_len,
+					    t_u16 *user_data_len)
+{
+	t_u16 i = 0, j = 0, len = 0;
+
+	len = strlen(data);
+	for (i = 0, j = 0; (i < data_len) && (j < buff_len); ++j) {
+		t_u32 value = 0, value1 = 0;
+		t_u8 attr_len = 0;
+		attr_len = (t_u8) * (data + i);
+		++i;
+		if (attr_len > 0) {
+			t_u8 k = 0;
+			for (k = 0; k < attr_len; ++k) {
+				value1 = (t_u8) * (data + i + k);
+				value = (value << 8) + value1;
+			}
+			i = i + k;
+		} else {
+			PRINTM(MERROR, "\nIn parse_args: Invalid attr_len \n");
+			*user_data_len = 0;
+			return -1;
+		}
+		user_buff[j] = value;
+	}
+	*user_data_len = j;
+	return 0;
+}
+
+/**
+ * @brief Vendor cmd to trigger the scancfg params.
+ *	Set/Get the scancfg params to/from driver
+ *
+ * @param wiphy    A pointer to wiphy struct
+ * @param wdev     A pointer to wireless_dev struct
+ * @param data     a pointer to data
+ * @param  len     data length
+ *
+ * @return      0: success  -1: fail
+ */
+static int woal_cfg80211_subcmd_set_get_scancfg(struct wiphy *wiphy,
+						struct wireless_dev *wdev,
+						const void *data, int len)
+{
+	struct net_device *dev = wdev->netdev;
+	moal_private *priv = (moal_private *)woal_get_netdev_priv(dev);
+	mlan_ds_scan *scan = NULL;
+	mlan_ioctl_req *req = NULL;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+	struct sk_buff *skb = NULL;
+	t_s32 user_data[9];
+	t_s32 ret = 0;
+	t_u16 user_data_len = 0;
+	t_u16 ret_length = 1;
+	t_u8 get_data = 0, get_val = 0;
+	t_u8 *data_buff = (t_u8 *)data;
+	t_u8 *pos = NULL;
+	ENTER();
+
+	if (len < 1) {
+		PRINTM(MERROR, "vendor cmd: scancfg - Invalid data length!\n");
+		ret = -EINVAL;
+		goto done;
+	}
+	if (len == 1) {
+		PRINTM(MMSG, "vendor cmd: Get scancfg params!\n");
+		get_val = (t_u8) * (data_buff);
+
+		/* Get scancfg works if an input argument passed is 00 */
+		if (get_val) {
+			PRINTM(MERROR,
+			       "vendor cmd: Get scancfg failed due to Invalid argument!\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		get_data = 1;
+	} else if (len > 1) {
+		PRINTM(MMSG, "Vendor cmd: Set scancfg params!\n");
+		memset((char *)user_data, 0, sizeof(user_data));
+
+		/* vendor cmd : the user_data_len is set only for set cmd */
+		if (woal_parse_vendor_cmd_attributes(data_buff, len, user_data,
+						     ARRAY_SIZE(user_data),
+						     &user_data_len)) {
+			PRINTM(MMSG,
+			       "vendor cmd: Couldn't parse the scancfg params!\n");
+			ret = -EINVAL;
+			goto done;
+		}
+	}
+
+	/* Allocate an IOCTL request buffer */
+	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_scan));
+	if (req == NULL) {
+		PRINTM(MERROR,
+		       "vendor cmd: Could not allocate mlan ioctl request, scancfg!\n");
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	/* Fill request buffer */
+	scan = (mlan_ds_scan *)req->pbuf;
+	scan->sub_command = MLAN_OID_SCAN_CONFIG;
+	req->req_id = MLAN_IOCTL_SCAN;
+
+	/* Validate each scancfg parameters */
+	if (user_data_len) {
+		DBG_HEXDUMP(MCMD_D, "scancfg input dump: ", (t_u8 *)user_data,
+			    (user_data_len * sizeof(t_u32)));
+		moal_memcpy_ext(priv->phandle, &scan->param.scan_cfg, user_data,
+				sizeof(user_data),
+				sizeof(scan->param.scan_cfg));
+		if (scan->param.scan_cfg.scan_type > MLAN_SCAN_TYPE_PASSIVE) {
+			PRINTM(MERROR,
+			       "vendor cmd:Invalid argument for scan type\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if (scan->param.scan_cfg.scan_mode > MLAN_SCAN_MODE_ANY) {
+			PRINTM(MERROR,
+			       "vendor cmd:Invalid argument for scan mode\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if (scan->param.scan_cfg.scan_probe > MAX_PROBES) {
+			PRINTM(MERROR,
+			       "vendor cmd:Invalid argument for scan probes\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if ((scan->param.scan_cfg.scan_time.specific_scan_time >
+		     MRVDRV_MAX_ACTIVE_SCAN_CHAN_TIME) ||
+		    (scan->param.scan_cfg.scan_time.active_scan_time >
+		     MRVDRV_MAX_ACTIVE_SCAN_CHAN_TIME) ||
+		    (scan->param.scan_cfg.scan_time.passive_scan_time >
+		     MRVDRV_MAX_PASSIVE_SCAN_CHAN_TIME)) {
+			PRINTM(MERROR, "Invalid argument for scan time\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if (scan->param.scan_cfg.passive_to_active_scan >
+		    MLAN_PASS_TO_ACT_SCAN_DIS) {
+			PRINTM(MERROR,
+			       "Invalid argument for Passive to Active Scan\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if (scan->param.scan_cfg.ext_scan > MLAN_EXT_SCAN_ENH) {
+			PRINTM(MERROR, "Invalid argument for extended scan\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if (scan->param.scan_cfg.scan_chan_gap >
+		    MRVDRV_MAX_SCAN_CHAN_GAP_TIME) {
+			PRINTM(MERROR,
+			       "Invalid argument for scan channel gap\n");
+			ret = -EINVAL;
+			goto done;
+		}
+
+		req->action = MLAN_ACT_SET;
+		if (scan->param.scan_cfg.scan_time.specific_scan_time)
+			priv->phandle->user_scan_cfg = MTRUE;
+		PRINTM(MINFO, "vendor cmd: SET ioctl request for scanfg\n");
+		woal_print_scancfg_params(scan);
+	} else {
+		PRINTM(MINFO, "vendor cmd: GET ioctl request for scanfg\n");
+		req->action = MLAN_ACT_GET;
+	}
+
+	/* Send IOCTL request to MLAN */
+	status = woal_request_ioctl(priv, req, MOAL_IOCTL_WAIT);
+	if (status == MLAN_STATUS_SUCCESS) {
+		PRINTM(MMSG, "Set/Get scancfg ioctl successfull\n");
+		if (!user_data_len) {
+			moal_memcpy_ext(priv->phandle, user_data,
+					&scan->param.scan_cfg,
+					sizeof(scan->param.scan_cfg),
+					sizeof(user_data));
+			DBG_HEXDUMP(MCMD_D, "scancfg dump: ", (t_u8 *)user_data,
+				    sizeof(user_data));
+			ret_length = sizeof(mlan_scan_cfg);
+		}
+	} else {
+		PRINTM(MERROR, "Set/Get scancfg ioctl failed!\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	/* Allocate skb for cmd reply*/
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, ret_length);
+	if (!skb) {
+		PRINTM(MERROR,
+		       "vendor cmd: allocate memory fail for vendor cmd\n");
+		ret = -ENOMEM;
+		goto done;
+	}
+	/* Get scancfg if an input argument passed is 00 */
+	if (!user_data_len && get_data == 1) {
+		PRINTM(MINFO, "vendor cmd: copying the response into buffer\n");
+		scan = (mlan_ds_scan *)req->pbuf;
+		pos = skb_put(skb, sizeof(mlan_scan_cfg));
+		moal_memcpy_ext(priv->phandle, pos, &scan->param.scan_cfg,
+				sizeof(mlan_scan_cfg), sizeof(mlan_scan_cfg));
+		woal_print_scancfg_params(scan);
+	}
+
+	ret = cfg80211_vendor_cmd_reply(skb);
+	if (unlikely(ret))
+		PRINTM(MERROR, "vendor cmd: reply failed with ret:%d \n", ret);
+
+done:
+	if (status != MLAN_STATUS_PENDING && req)
+		kfree(req);
+
+	LEAVE();
+	return ret;
+}
+
+/*
+ * @brief A common function copies an user data(from integer array) into
+ * different types of structures. Declare a layout based on each member size of
+ * a strucure within the caller().
+ *
+ * @param phandle		A pointer to moal handler
+ * @param dest_struct		Final destination strucuture
+ * @param src_data		A pointer to input user data/integer array
+ * @param src_data_len		Input user data length
+ * @param dest_struct_len	Destination data structure length
+ * @param layout		A pointer to integer array/layout describing struct
+ * member
+ * *
+ * @return      0: success  -1: fail
+ * */
+static void
+woal_memcpy_user_intarray_to_struct(moal_handle *phandle, void *dest_struct,
+				    t_u32 *src_data, t_u32 src_data_len,
+				    t_u32 dest_struct_len, t_u32 *layout)
+{
+	t_u8 *dest = (t_u8 *)dest_struct;
+	t_u16 i = 0;
+
+	if (!dest_struct || !src_data) {
+		PRINTM(MERROR, "dest/src pointer is null\n");
+	}
+
+	for (i = 0; (layout[i] > 0 && i < src_data_len); ++i) {
+		moal_memcpy_ext(phandle, dest, src_data, layout[i], layout[i]);
+		dest += layout[i];
+		if (layout[i] > sizeof(t_u32)) {
+			src_data += layout[i] / sizeof(t_u32);
+			src_data += (layout[i] % sizeof(t_u32)) ? 1 : 0;
+		} else
+			src_data += 1;
+	}
+}
+
+/*
+ * @brief A common function directly copies different type of structures into
+ * user data buffer(integere array). Declare a layout based on each member size
+ * of a strucure within the caller function.
+ *
+ * @param phandle		A pointer to moal handler
+ * @param dest_data		A pointer to destination data buffer/integer
+ * array
+ * @param src_struct		A pointer to source structure
+ * @param src_struct_len	Source data structure length
+ * @param dest_data_len		Destination user data length
+ * @param layout		A pointer to integer array/layout describing struct
+ * member
+ * *
+ * @return      0: success  -1: fail
+ * */
+static void
+woal_memcpy_struct_to_user_intarray(moal_handle *phandle, t_u32 *dest_data,
+				    void *src_struct, t_u32 src_struct_len,
+				    t_u32 dest_data_len, t_u32 *layout)
+{
+	t_u8 *src = (t_u8 *)src_struct;
+	t_u16 i = 0;
+
+	if (!dest_data || !src_struct) {
+		PRINTM(MERROR, "dest/src pointer is null\n");
+	}
+
+	for (i = 0; (layout[i] > 0 && i < dest_data_len); ++i) {
+		moal_memcpy_ext(phandle, dest_data, src, layout[i], layout[i]);
+		src += layout[i];
+		if (layout[i] > sizeof(t_u32)) {
+			dest_data += layout[i] / sizeof(t_u32);
+			dest_data += (layout[i] % sizeof(t_u32)) ? 1 : 0;
+		} else
+			dest_data += 1;
+	}
+}
+
+/**
+ * @brief Prints the addba params from the woal_print_addba_param
+ *
+ * @param scan	A pointer to woal_print_addba_param struct
+ *
+ * @return      void
+ */
+static void woal_print_addba_params(mlan_ds_11n_addba_param *addba)
+{
+	if (!addba) {
+		PRINTM(MERROR, "addba param is null\n");
+		return;
+	}
+
+	PRINTM(MCMND,
+	       "ADDBA: timeout:%d txwinsize:%d rxwinsize:%d txamsdu=%d, rxamsdu=%d\n",
+	       addba->timeout, addba->txwinsize, addba->rxwinsize,
+	       addba->txamsdu, addba->rxamsdu);
+	return;
+}
+
+/**
+ * @brief API to trigger the addba params.
+ *	It sets or gets the addba params
+ *
+ * @param wiphy    A pointer to wiphy struct
+ * @param wdev     A pointer to wireless_dev struct
+ * @param data     a pointer to data
+ * @param  len     data length
+ *
+ * @return      0: success  -1: fail
+ */
+static int woal_cfg80211_subcmd_set_get_addbaparams(struct wiphy *wiphy,
+						    struct wireless_dev *wdev,
+						    const void *data, int len)
+{
+	struct net_device *dev = wdev->netdev;
+	moal_private *priv = (moal_private *)woal_get_netdev_priv(dev);
+	mlan_ds_11n_cfg *cfg_addba = NULL;
+	mlan_ioctl_req *req = NULL;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+	struct sk_buff *skb = NULL;
+	t_u32 user_data[5];
+	/* Define layout as per required structure */
+	t_u32 layout[5] = {sizeof(t_u32), sizeof(t_u32), sizeof(t_u32),
+			   sizeof(char), sizeof(char)};
+	t_s32 ret = 0;
+	t_u16 user_data_len = 0;
+	t_u16 ret_length = 1;
+	t_u8 get_data = 0, get_val = 0;
+	t_u8 *data_buff = (t_u8 *)data;
+	t_u8 *pos = NULL;
+	ENTER();
+
+	if (len < 1) {
+		PRINTM(MERROR,
+		       "vendor cmd: addbaparams - Invalid data length!\n");
+		ret = -EINVAL;
+		goto done;
+	}
+	if (len == 1) {
+		PRINTM(MMSG, "vendor cmd: Get addbaparams!\n");
+		get_val = (t_u8) * (data_buff);
+
+		/* Get addbaparams works if an input argument passed is 00 */
+		if (get_val) {
+			PRINTM(MERROR,
+			       "vendor cmd: Get addbaparams failed due to Invalid argument!\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		get_data = 1;
+		memset((char *)user_data, 0, sizeof(user_data));
+	} else if (len > 1) {
+		PRINTM(MMSG, "Vendor cmd: Set addbaparams !\n");
+		memset((char *)user_data, 0, sizeof(user_data));
+
+		/* vendor cmd : the user_data_len is set only for set cmd */
+		if (woal_parse_vendor_cmd_attributes(data_buff, len, user_data,
+						     ARRAY_SIZE(user_data),
+						     &user_data_len)) {
+			PRINTM(MERROR,
+			       "vendor cmd: Couldn't parse the addbaparams!\n");
+			ret = -EINVAL;
+			goto done;
+		}
+	}
+
+	/* Allocate an IOCTL request buffer */
+	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_11n_cfg));
+	if (req == NULL) {
+		PRINTM(MERROR,
+		       "vendor cmd: Could not allocate mlan ioctl request, addbaparams!\n");
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	/* Fill request buffer */
+	cfg_addba = (mlan_ds_11n_cfg *)req->pbuf;
+	cfg_addba->sub_command = MLAN_OID_11N_CFG_ADDBA_PARAM;
+	req->req_id = MLAN_IOCTL_11N_CFG;
+
+	/* Validate each addbaparams parameters */
+	if (user_data_len) {
+		DBG_HEXDUMP(MCMD_D,
+			    "addbaparams input dump: ", (t_u8 *)user_data,
+			    (user_data_len * sizeof(t_u32)));
+		/* To copy an user data in an integer array format into strcture
+		 */
+		woal_memcpy_user_intarray_to_struct(
+			priv->phandle, (void *)&cfg_addba->param.addba_param,
+			user_data, ARRAY_SIZE(user_data),
+			sizeof(cfg_addba->param.addba_param), layout);
+
+		woal_print_addba_params(&cfg_addba->param.addba_param);
+		if (cfg_addba->param.addba_param.timeout >
+		    MLAN_DEFAULT_BLOCK_ACK_TIMEOUT) {
+			PRINTM(MERROR, "Incorrect addba timeout value.\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if (cfg_addba->param.addba_param.txwinsize >
+		    MLAN_AMPDU_MAX_TXWINSIZE) {
+			PRINTM(MERROR, "Incorrect Tx window size.\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if (cfg_addba->param.addba_param.rxwinsize >
+		    MLAN_AMPDU_MAX_RXWINSIZE) {
+			PRINTM(MERROR, "Incorrect Rx window size.\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		if (cfg_addba->param.addba_param.txamsdu > 1 ||
+		    cfg_addba->param.addba_param.rxamsdu > 1) {
+			PRINTM(MERROR, "Incorrect Tx/Rx amsdu.\n");
+			ret = -EINVAL;
+			goto done;
+		}
+		req->action = MLAN_ACT_SET;
+		PRINTM(MINFO,
+		       "vendor cmd: SET ioctl request for addbaparams\n");
+	} else {
+		PRINTM(MINFO,
+		       "vendor cmd: GET ioctl request for addbaparams\n");
+		req->action = MLAN_ACT_GET;
+	}
+
+	/* Send IOCTL request to MLAN */
+	status = woal_request_ioctl(priv, req, MOAL_IOCTL_WAIT);
+	if (status == MLAN_STATUS_SUCCESS) {
+		PRINTM(MMSG, "Set/Get addbaparams ioctl successfull\n");
+		if (!user_data_len) {
+			/* To copy an strcture members into user data/integer
+			 * array separately */
+			woal_memcpy_struct_to_user_intarray(
+				priv->phandle, user_data,
+				(void *)&cfg_addba->param.addba_param,
+				sizeof(cfg_addba->param.addba_param),
+				ARRAY_SIZE(user_data), layout);
+			woal_print_addba_params(&cfg_addba->param.addba_param);
+			ret_length = sizeof(user_data);
+		}
+	} else {
+		PRINTM(MERROR, "Set/Get addbaparams ioctl failed!\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	/* Allocate skb for cmd reply*/
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, ret_length);
+	if (!skb) {
+		PRINTM(MERROR,
+		       "vendor cmd: allocate memory fail for vendor cmd\n");
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	/* Get addbaparams if an input data argument is 00 */
+	if (!user_data_len && get_data == 1) {
+		PRINTM(MINFO, "vendor cmd: copying the response into buffer\n");
+		DBG_HEXDUMP(MCMD_D, "addbaparams dump: ", (t_u8 *)user_data,
+			    sizeof(user_data));
+		cfg_addba = (mlan_ds_11n_cfg *)req->pbuf;
+		pos = skb_put(skb, sizeof(user_data));
+		moal_memcpy_ext(priv->phandle, pos, user_data,
+				sizeof(user_data), sizeof(user_data));
+	}
+
+	ret = cfg80211_vendor_cmd_reply(skb);
+	if (unlikely(ret))
+		PRINTM(MERROR, "vendor cmd: reply failed with ret:%d \n", ret);
+
+done:
+	if (status != MLAN_STATUS_PENDING && req)
+		kfree(req);
+	LEAVE();
+	return ret;
+}
+
+/**
+ * @brief API to trigger the vendor cmd related to
+ * hostcmd/sys_cfg_80211d_country_ie. It sets/get/clear the function/operation
+ * that is specific the hostcmd.
+ *
+ * @param wiphy    A pointer to wiphy struct
+ * @param wdev     A pointer to wireless_dev struct
+ * @param data     a pointer to data
+ * @param  len     data length
+ *
+ * @return      0: success  -1: fail
+ */
+static int woal_cfg80211_subcmd_hostcmd(struct wiphy *wiphy,
+					struct wireless_dev *wdev,
+					const void *data, int len)
+{
+	struct net_device *dev = wdev->netdev;
+	moal_private *priv = (moal_private *)woal_get_netdev_priv(dev);
+	mlan_ds_misc_cfg *misc_cfg = NULL;
+	mlan_ioctl_req *req = NULL;
+	mlan_status status = MLAN_STATUS_SUCCESS;
+	struct sk_buff *skb = NULL;
+	HostCmd_DS_GEN cmd_info;
+	t_s32 ret = 0;
+	t_u16 ret_length = 1;
+	t_u16 action = 0;
+	t_u8 get_data = 0;
+	t_u8 *data_buff = (t_u8 *)data;
+	t_u8 *pos = NULL;
+	ENTER();
+
+	if (len < (sizeof(HostCmd_DS_GEN) + sizeof(action))) {
+		PRINTM(MERROR, "vendor cmd: Invalid hostcmd!\n");
+		ret = -EINVAL;
+		goto done;
+	}
+
+	moal_memcpy_ext(priv->phandle, &cmd_info, data_buff,
+			sizeof(HostCmd_DS_GEN), sizeof(HostCmd_DS_GEN));
+	action = (u16) * (data_buff + sizeof(cmd_info));
+
+	PRINTM(MMSG, "vendor cmd: hostcmd len=%d, action=%d\n", len, action);
+	if (action == 0)
+		get_data = 1;
+
+	/* Allocate an IOCTL request buffer */
+	req = woal_alloc_mlan_ioctl_req(sizeof(mlan_ds_misc_cfg));
+	if (req == NULL) {
+		PRINTM(MERROR,
+		       "vendor cmd: Could not allocate mlan ioctl memory, hostcmd!\n");
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	/* Fill request buffer */
+	misc_cfg = (mlan_ds_misc_cfg *)req->pbuf;
+	misc_cfg->sub_command = MLAN_OID_MISC_HOST_CMD;
+	req->req_id = MLAN_IOCTL_MISC_CFG;
+	req->action = action;
+	misc_cfg->param.hostcmd.len = woal_le16_to_cpu(cmd_info.size);
+
+	/* Copy the entire command data into hostcmd cmd buffer */
+	moal_memcpy_ext(priv->phandle, misc_cfg->param.hostcmd.cmd, data_buff,
+			misc_cfg->param.hostcmd.len, MRVDRV_SIZE_OF_CMD_BUFFER);
+
+	DBG_HEXDUMP(MCMD_D, "vendor cmd: hostcmd cmd dump",
+		    (t_u8 *)misc_cfg->param.hostcmd.cmd,
+		    misc_cfg->param.hostcmd.len);
+
+	/* Send IOCTL request to MLAN */
+	status = woal_request_ioctl(priv, req, MOAL_IOCTL_WAIT);
+	if (status == MLAN_STATUS_SUCCESS) {
+		PRINTM(MMSG, "Set/Clear/Get hostcmd ioctl successfull\n");
+		if (get_data) {
+			ret_length = misc_cfg->param.hostcmd.len;
+			PRINTM(MMSG, "vendor cmd: hostcmd GET, len=%d\n",
+			       ret_length);
+		}
+	} else {
+		PRINTM(MERROR, "Set/Clear/Get hostcmd ioctl failed!\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	/* Allocate skb for cmd reply*/
+	skb = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, ret_length);
+	if (!skb) {
+		PRINTM(MERROR, "vendor cmd: memory allocation failed \n");
+		ret = -ENOMEM;
+		goto done;
+	}
+
+	if (get_data && ret_length > 1) {
+		PRINTM(MINFO, "vendor cmd: copying the response into buffer\n");
+		DBG_HEXDUMP(MCMD_D, "vendor cmd: hostcmd dump",
+			    (t_u8 *)misc_cfg->param.hostcmd.cmd, ret_length);
+		pos = skb_put(skb, ret_length);
+		moal_memcpy_ext(priv->phandle, pos, misc_cfg->param.hostcmd.cmd,
+				misc_cfg->param.hostcmd.len,
+				misc_cfg->param.hostcmd.len);
+	}
+
+	ret = cfg80211_vendor_cmd_reply(skb);
+	if (unlikely(ret))
+		PRINTM(MERROR, "vendor cmd: reply failed with ret:%d \n", ret);
+done:
+	if (status != MLAN_STATUS_PENDING && req)
+		kfree(req);
+	LEAVE();
+	return ret;
+}
+
+/**
  * @brief vendor command to get link layer statistic
  *
  * @param wiphy    A pointer to wiphy struct
@@ -5679,6 +6332,42 @@ static const struct wiphy_vendor_command vendor_commands[] = {
 #if KERNEL_VERSION(5, 3, 0) <= CFG80211_VERSION_CODE
 		.policy = woal_attr_policy,
 		.maxattr = ATTR_WIFI_MAX,
+#endif
+	},
+	{
+		.info = {
+				.vendor_id = MRVL_VENDOR_ID,
+				.subcmd = SUBCMD_SET_GET_SCANCFG,
+			},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = woal_cfg80211_subcmd_set_get_scancfg,
+#if KERNEL_VERSION(5, 3, 0) <= CFG80211_VERSION_CODE
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+	},
+	{
+		.info = {
+				.vendor_id = MRVL_VENDOR_ID,
+				.subcmd = SUBCMD_SET_GET_ADDBAPARAMS,
+			},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = woal_cfg80211_subcmd_set_get_addbaparams,
+#if KERNEL_VERSION(5, 3, 0) <= CFG80211_VERSION_CODE
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+	},
+	{
+		.info = {
+				.vendor_id = MRVL_VENDOR_ID,
+				.subcmd = SUBCMD_SET_GET_CLR_HOSTCMD,
+			},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV |
+			 WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = woal_cfg80211_subcmd_hostcmd,
+#if KERNEL_VERSION(5, 3, 0) <= CFG80211_VERSION_CODE
+		.policy = VENDOR_CMD_RAW_DATA,
 #endif
 	},
 	{

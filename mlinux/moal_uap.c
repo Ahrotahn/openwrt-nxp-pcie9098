@@ -1917,6 +1917,17 @@ static int woal_uap_antenna_cfg(struct net_device *dev, struct ifreq *req)
 		mreq->action = MLAN_ACT_SET;
 		radio->param.ant_cfg.tx_antenna = antenna_config.tx_mode;
 		radio->param.ant_cfg.rx_antenna = antenna_config.rx_mode;
+	}
+
+	status = woal_request_ioctl(priv, mreq, MOAL_IOCTL_WAIT);
+	if (status != MLAN_STATUS_SUCCESS) {
+		PRINTM(MERROR, "Failed to set new antenna config\n");
+		ret = -EFAULT;
+		goto done;
+	}
+
+	/* Notify the CFG80211 layer only on SUCCESS from FW */
+	if ((status == MLAN_STATUS_SUCCESS) && (mreq->action == MLAN_ACT_SET)) {
 #if defined(STA_CFG80211) || defined(UAP_CFG80211)
 		if (IS_CARD9098(priv->phandle->card_type) ||
 		    IS_CARD9097(priv->phandle->card_type) ||
@@ -1930,11 +1941,6 @@ static int woal_uap_antenna_cfg(struct net_device *dev, struct ifreq *req)
 #endif
 	}
 
-	status = woal_request_ioctl(priv, mreq, MOAL_IOCTL_WAIT);
-	if (status != MLAN_STATUS_SUCCESS) {
-		ret = -EFAULT;
-		goto done;
-	}
 	if (mreq->action == MLAN_ACT_GET) {
 		antenna_config.tx_mode = radio->param.ant_cfg.tx_antenna;
 		antenna_config.rx_mode = radio->param.ant_cfg.rx_antenna;
@@ -2156,7 +2162,8 @@ static int woal_uap_get_dfs_chan(t_u8 pri_chan, t_u8 bw,
 			       {116, 120, 124, 128},
 			       {132, 136, 140, 144}};
 	t_u8 find = false;
-	int i, j;
+	int j;
+	int i;
 	t_u8 sec_chan = 0;
 	mlan_ds_11h_chan_dfs_state *pos = ch_dfs_state;
 	t_u8 n_chan = 1;
@@ -2790,7 +2797,8 @@ static int woal_uap_sta_deauth_ioctl(struct net_device *dev, struct ifreq *req)
 			sizeof(mlan_deauth_param),
 			sizeof(bss->param.deauth_param));
 	status = woal_request_ioctl(priv, ioctl_req, MOAL_IOCTL_WAIT);
-	if (status != MLAN_STATUS_SUCCESS) {
+	if ((status != MLAN_STATUS_SUCCESS) &&
+	    (status != MLAN_STATUS_PENDING)) {
 		ret = -EFAULT;
 		if (copy_to_user(req->ifr_data, &ioctl_req->status_code,
 				 sizeof(t_u32)))
@@ -3175,7 +3183,8 @@ static int woal_uap_power_mode_ioctl(struct net_device *dev, struct ifreq *req)
 	}
 
 	status = woal_request_ioctl(priv, ioctl_req, MOAL_IOCTL_WAIT);
-	if (status != MLAN_STATUS_SUCCESS) {
+	if ((status != MLAN_STATUS_SUCCESS) &&
+	    (status != MLAN_STATUS_PENDING)) {
 		ret = -EFAULT;
 		if (copy_to_user(req->ifr_data, &ioctl_req->status_code,
 				 sizeof(t_u32)))
@@ -3931,6 +3940,9 @@ int woal_uap_set_11ax_status(moal_private *priv, t_u8 action, t_u8 band,
 				&hecap_ie->ext_id, he_cfg.he_cap.len,
 				he_cfg.he_cap.len);
 	}
+#define HE_MAC_CAP_TWT_REQ_SUPPORT MBIT(1)
+	/* uap mode should be TWT responder only */
+	he_cfg.he_cap.he_mac_cap[0] &= ~HE_MAC_CAP_TWT_REQ_SUPPORT;
 	if (action == MLAN_ACT_DISABLE) {
 		if (he_cfg.he_cap.len &&
 		    (he_cfg.he_cap.ext_id == HE_CAPABILITY)) {

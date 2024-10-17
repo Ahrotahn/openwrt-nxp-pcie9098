@@ -206,6 +206,8 @@ typedef t_s32 t_sval;
 #define MLAN_RATE_INDEX_MCS4 4
 /** Rate index for MCS 7 */
 #define MLAN_RATE_INDEX_MCS7 7
+/** Rate index for MCS 8 */
+#define MLAN_RATE_INDEX_MCS8 8
 /** Rate index for MCS 9 */
 #define MLAN_RATE_INDEX_MCS9 9
 /** Rate index for MCS11 */
@@ -395,14 +397,17 @@ typedef t_u8 mlan_802_11_mac_addr[MLAN_MAC_ADDR_LENGTH];
 #define CARD_TYPE_IW624 0x0b
 /** Black bird card type */
 #define CARD_TYPE_AW693 0x0c
-/** IW615 card type */
-#define CARD_TYPE_IW615 0x0d
+/** IW610 card type */
+#define CARD_TYPE_IW610 0x0d
 
 /** 9098 A0 reverion num */
 #define CHIP_9098_REV_A0 1
 #define CHIP_9098_REV_A1 2
 /** 9097 CHIP REV */
 #define CHIP_9097_REV_B0 1
+/** Blackbird reverion num */
+#define CHIP_AW693_REV_A0 1
+#define CHIP_AW693_REV_A1 2
 
 #define INTF_MASK 0xff
 #define CARD_TYPE_MASK 0xff
@@ -432,8 +437,8 @@ typedef t_u8 mlan_802_11_mac_addr[MLAN_MAC_ADDR_LENGTH];
 #define CARD_TYPE_SDIW624 (CARD_TYPE_IW624 | (INTF_SD << 8))
 /** SD_IW624 card type */
 #define CARD_TYPE_SDAW693 (CARD_TYPE_AW693 | (INTF_SD << 8))
-/** SD_IW615 card type */
-#define CARD_TYPE_SDIW615 (CARD_TYPE_IW615 | (INTF_SD << 8))
+/** SD_IW610 card type */
+#define CARD_TYPE_SDIW610 (CARD_TYPE_IW610 | (INTF_SD << 8))
 
 #define IS_SD8887(ct) (CARD_TYPE_SD8887 == (ct))
 #define IS_SD8897(ct) (CARD_TYPE_SD8897 == (ct))
@@ -447,7 +452,7 @@ typedef t_u8 mlan_802_11_mac_addr[MLAN_MAC_ADDR_LENGTH];
 #define IS_SD8801(ct) (CARD_TYPE_SD8801 == (ct))
 #define IS_SDIW624(ct) (CARD_TYPE_SDIW624 == (ct))
 #define IS_SDAW693(ct) (CARD_TYPE_SDAW693 == (ct))
-#define IS_SDIW615(ct) (CARD_TYPE_SDIW615 == (ct))
+#define IS_SDIW610(ct) (CARD_TYPE_SDIW610 == (ct))
 
 /** SD8887 Card */
 #define CARD_SD8887 "SD8887"
@@ -473,8 +478,8 @@ typedef t_u8 mlan_802_11_mac_addr[MLAN_MAC_ADDR_LENGTH];
 #define CARD_SDIW624 "SDIW624"
 /** SDAW693 Card */
 #define CARD_SDAW693 "SDAW693"
-/** SDIW615 Card */
-#define CARD_SDIW615 "SDIW615"
+/** SDIW610 Card */
+#define CARD_SDIW610 "SDIW610"
 #endif
 
 #ifdef PCIE
@@ -533,8 +538,8 @@ typedef t_u8 mlan_802_11_mac_addr[MLAN_MAC_ADDR_LENGTH];
 #define CARD_TYPE_USB9097 (CARD_TYPE_9097 | (INTF_USB << 8))
 /** USBIW624 card type */
 #define CARD_TYPE_USBIW624 (CARD_TYPE_IW624 | (INTF_USB << 8))
-/** USBIW615 card type */
-#define CARD_TYPE_USBIW615 (CARD_TYPE_IW615 | (INTF_USB << 8))
+/** USBIW610 card type */
+#define CARD_TYPE_USBIW610 (CARD_TYPE_IW610 | (INTF_USB << 8))
 
 #define IS_USB8801(ct) (CARD_TYPE_USB8801 == (ct))
 #define IS_USB8897(ct) (CARD_TYPE_USB8897 == (ct))
@@ -543,7 +548,7 @@ typedef t_u8 mlan_802_11_mac_addr[MLAN_MAC_ADDR_LENGTH];
 #define IS_USB9098(ct) (CARD_TYPE_USB9098 == (ct))
 #define IS_USB9097(ct) (CARD_TYPE_USB9097 == (ct))
 #define IS_USBIW624(ct) (CARD_TYPE_USBIW624 == (ct))
-#define IS_USBIW615(ct) (CARD_TYPE_USBIW615 == (ct))
+#define IS_USBIW610(ct) (CARD_TYPE_USBIW610 == (ct))
 
 /** USB8801 Card */
 #define CARD_USB8801 "USB8801"
@@ -559,14 +564,15 @@ typedef t_u8 mlan_802_11_mac_addr[MLAN_MAC_ADDR_LENGTH];
 #define CARD_USB9097 "USBIW620"
 /** USBIW624 Card */
 #define CARD_USBIW624 "USBIW624"
-/** USBIW615 Card */
-#define CARD_USBIW615 "USBIW615"
+/** USBIW610 Card */
+#define CARD_USBIW610 "USBIW610"
 #endif
 
 #define IS_CARD8801(ct) (CARD_TYPE_8801 == ((ct)&0xf))
 #define IS_CARD8887(ct) (CARD_TYPE_8887 == ((ct)&0xf))
 #define IS_CARD8897(ct) (CARD_TYPE_8897 == ((ct)&0xf))
 #define IS_CARD8977(ct) (CARD_TYPE_8977 == ((ct)&0xf))
+#define IS_CARD8978(ct) (CARD_TYPE_8978 == ((ct)&0xf))
 #define IS_CARD8997(ct) (CARD_TYPE_8997 == ((ct)&0xf))
 #define IS_CARD8987(ct) (CARD_TYPE_8987 == ((ct)&0xf))
 #define IS_CARD9098(ct) (CARD_TYPE_9098 == ((ct)&0xf))
@@ -574,7 +580,7 @@ typedef t_u8 mlan_802_11_mac_addr[MLAN_MAC_ADDR_LENGTH];
 #define IS_CARD9177(ct) (CARD_TYPE_9177 == ((ct)&0xf))
 #define IS_CARDIW624(ct) (CARD_TYPE_IW624 == ((ct)&0xf))
 #define IS_CARDAW693(ct) (CARD_TYPE_AW693 == ((ct)&0xf))
-#define IS_CARDIW615(ct) (CARD_TYPE_IW615 == ((ct)&0xf))
+#define IS_CARDIW610(ct) (CARD_TYPE_IW610 == ((ct)&0xf))
 
 typedef struct _card_type_entry {
 	t_u16 card_type;
@@ -648,6 +654,8 @@ typedef enum {
 
 #define MLAN_BUF_FLAG_MC_AGGR_PKT MBIT(17)
 
+#define MLAN_BUF_FLAG_TCP_PKT MBIT(18)
+
 #define MLAN_BUF_FLAG_LLDE_PKT_FILTER MBIT(19)
 
 #ifdef DEBUG_LEVEL1
@@ -660,8 +668,8 @@ typedef enum {
 #define MEVENT MBIT(5)
 #define MINTR MBIT(6)
 #define MIOCTL MBIT(7)
-
 #define MREG_D MBIT(9)
+#define MREG MBIT(10)
 
 #define MMPA_D MBIT(15)
 #define MDAT_D MBIT(16)
@@ -670,7 +678,7 @@ typedef enum {
 #define MFW_D MBIT(19)
 #define MIF_D MBIT(20)
 #define MFWDP_D MBIT(21)
-
+#define MSCH_D MBIT(22)
 #define MENTRY MBIT(28)
 #define MWARN MBIT(29)
 #define MINFO MBIT(30)
@@ -1630,7 +1638,7 @@ typedef MLAN_PACK_START struct _tdls_each_link_status {
 	/** Key Length */
 	t_u8 key_length;
 	/** actual key */
-	t_u8 key[1];
+	t_u8 key[];
 } MLAN_PACK_END tdls_each_link_status;
 
 /** TDLS configuration data */
@@ -1757,7 +1765,7 @@ typedef MLAN_PACK_START struct _tdls_all_config {
 			/** number of links */
 			t_u8 active_links;
 			/** structure for link status */
-			tdls_each_link_status link_stats[1];
+			tdls_each_link_status link_stats[];
 		} MLAN_PACK_END tdls_link_status_resp;
 
 	} u;
@@ -2596,6 +2604,7 @@ typedef struct _mlan_callbacks {
 				     t_u8 antenna);
 	t_void (*moal_updata_peer_signal)(t_void *pmoal, t_u32 bss_index,
 					  t_u8 *peer_addr, t_s8 snr, t_s8 nflr);
+	mlan_status (*moal_get_host_time_ns)(t_u64 *time);
 	t_u64 (*moal_do_div)(t_u64 num, t_u32 base);
 	void (*moal_tp_accounting)(t_void *pmoal, t_void *buf,
 				   t_u32 drop_point);
@@ -2694,6 +2703,8 @@ typedef struct _mlan_device {
 #endif
 	/** Auto deep sleep */
 	t_u32 auto_ds;
+	/** Boot Time Config */
+	t_u32 bootup_cal_ctrl;
 	/** IEEE PS mode */
 	t_u32 ps_mode;
 	/** Max Tx buffer size */
@@ -2745,6 +2756,8 @@ typedef struct _mlan_device {
 	t_u8 uap_max_sta;
 	/** wacp mode */
 	t_u8 wacp_mode;
+	/** custom Fw data */
+	t_u32 fw_data_cfg;
 	/** drv mode */
 	t_u32 drv_mode;
 	/** dfs w53 cfg */
@@ -2763,8 +2776,12 @@ typedef struct _mlan_device {
 	t_u32 antcfg;
 	/** dmcs */
 	t_u8 dmcs;
+	t_u8 pref_dbc;
 	t_u32 reject_addba_req;
 
+	t_u32 max_tx_pending;
+	t_u16 tx_budget;
+	t_u8 mclient_scheduling;
 } mlan_device, *pmlan_device;
 
 /** MLAN API function prototype */

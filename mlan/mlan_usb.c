@@ -69,10 +69,10 @@ static const struct _mlan_card_info mlan_card_info_usb8997 = {
 
 #ifdef USB8978
 static const struct _mlan_card_info mlan_card_info_usb8978 = {
-	.max_tx_buf_size = MLAN_TX_DATA_BUF_SIZE_4K,
+	.max_tx_buf_size = MLAN_TX_DATA_BUF_SIZE_2K,
 	.v16_fw_api = 1,
 	.supp_ps_handshake = 1,
-	.default_11n_tx_bf_cap = DEFAULT_11N_TX_BF_CAP_2X2,
+	.default_11n_tx_bf_cap = DEFAULT_11N_TX_BF_CAP_1X1,
 	.support_11mc = 1,
 };
 #endif
@@ -110,8 +110,8 @@ static const struct _mlan_card_info mlan_card_info_usbIW624 = {
 };
 #endif
 
-#ifdef USBIW615
-static const struct _mlan_card_info mlan_card_info_usbIW615 = {
+#ifdef USBIW610
+static const struct _mlan_card_info mlan_card_info_usbIW610 = {
 	.max_tx_buf_size = MLAN_TX_DATA_BUF_SIZE_4K,
 	.v16_fw_api = 1,
 	.v17_fw_api = 1,
@@ -228,6 +228,10 @@ static mlan_status wlan_usb_prog_fw_w_helper(pmlan_adapter pmadapter,
 #if defined(USB9098)
 	t_u32 revision_id = 0;
 #endif
+	t_u32 i = 0;
+	t_u32 fw_data_param = pmadapter->init_para.fw_data_cfg;
+	fw_data_t fw_data_list[MAX_FW_DATA_BLOCK] = {0};
+	t_u32 fw_data_param_num = 0, fw_data_index = 0;
 
 	ENTER();
 
@@ -269,6 +273,16 @@ static mlan_status wlan_usb_prog_fw_w_helper(pmlan_adapter pmadapter,
 			check_fw_status = MTRUE;
 	}
 #endif
+
+	if (fw_data_param) {
+		fw_data_param_num =
+			MIN(MAX_FW_DATA_BLOCK, bitcount(fw_data_param));
+		/** Get the custom Fw data */
+		if (MLAN_STATUS_SUCCESS !=
+		    wlan_get_custom_fw_data(pmadapter, (t_u8 *)fw_data_list))
+			goto cleanup;
+	}
+
 #if defined(USB9097)
 	if (IS_USB9097(pmadapter->card_type))
 		check_fw_status = MTRUE;
@@ -434,6 +448,25 @@ static mlan_status wlan_usb_prog_fw_w_helper(pmlan_adapter pmadapter,
 
 		FWSeqNum++;
 		PRINTM(MINFO, ".\n");
+
+		if (fw_data_param) {
+			for (i = fw_data_index; i < fw_data_param_num;) {
+				firmware = fw_data_list[i].fw_data_buffer;
+				/** make TotalBytes as 0 as allocated custom Fw
+				 * data buffers are not contiguous */
+				TotalBytes = 0;
+				fw_data_index++;
+				break;
+			}
+			/** custom Fw data download complete, restore Fw */
+			if (i >= fw_data_param_num) {
+				firmware = pmfw->pfw_buf;
+				fw_data_param = 0;
+				fw_data_index = 0;
+				FWSeqNum = 0;
+				TotalBytes = 0;
+			}
+		}
 
 		/* Add FW ending check for secure download */
 		if (((DnldCmd == FW_CMD_21) && (DataLength == 0)) ||
@@ -828,9 +861,9 @@ mlan_status wlan_get_usb_device(pmlan_adapter pmadapter)
 		pmadapter->pcard_info = &mlan_card_info_usbIW624;
 		break;
 #endif
-#ifdef USBIW615
-	case CARD_TYPE_USBIW615:
-		pmadapter->pcard_info = &mlan_card_info_usbIW615;
+#ifdef USBIW610
+	case CARD_TYPE_USBIW610:
+		pmadapter->pcard_info = &mlan_card_info_usbIW610;
 		break;
 #endif
 	default:
@@ -1328,7 +1361,7 @@ static mlan_status wlan_usb_host_to_card(pmlan_private pmpriv, t_u8 type,
 	}
 	if (type == MLAN_TYPE_CMD
 #if defined(USB9098) || defined(USB9097) || defined(USBIW624) ||               \
-	defined(USB8997) || defined(USB8978)
+	defined(USB8997) || defined(USB8978) || defined(USBIW610)
 	    || type == MLAN_TYPE_VDLL
 #endif
 	) {
@@ -1389,9 +1422,13 @@ static mlan_status wlan_usb_evt_complete(pmlan_adapter pmadapter,
 					 mlan_buffer *pmbuf, mlan_status status)
 {
 	ENTER();
-	pmadapter->event_received = MFALSE;
+
+	wlan_request_event_lock(pmadapter);
+	if (pmadapter->event_received)
+		pmadapter->event_received = MFALSE;
 	pmadapter->event_cause = 0;
 	pmadapter->pmlan_buffer_event = MNULL;
+	wlan_release_event_lock(pmadapter);
 	pmadapter->callbacks.moal_recv_complete(pmadapter->pmoal_handle, pmbuf,
 						pmadapter->rx_cmd_ep, status);
 

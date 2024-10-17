@@ -550,6 +550,44 @@ static mlan_status wlan_cmd_mfg_otp_rw(pmlan_private pmpriv,
 }
 
 /**
+ *  @brief This function prepares command of MFG OTP CAL DATA RW.
+ *
+ *  @param pmpriv       A pointer to mlan_private structure
+ *  @param cmd          A pointer to HostCmd_DS_COMMAND structure
+ *  @param action       The action: GET or SET
+ *  @param pdata_buf    A pointer to data buffer
+ *
+ *  @return             MLAN_STATUS_SUCCESS
+ */
+
+static mlan_status wlan_cmd_mfg_otp_cal_data_rw(pmlan_private pmpriv,
+						HostCmd_DS_COMMAND *cmd,
+						t_u16 action, t_void *pdata_buf)
+{
+	mfg_cmd_otp_cal_data_rd_wr_t *mcmd =
+		(mfg_cmd_otp_cal_data_rd_wr_t *)&cmd->params
+			.mfg_otp_cal_data_rd_wr;
+	mfg_cmd_otp_cal_data_rd_wr_t *cfg =
+		(mfg_cmd_otp_cal_data_rd_wr_t *)pdata_buf;
+
+	ENTER();
+	cmd->command = wlan_cpu_to_le16(HostCmd_CMD_MFG_COMMAND);
+	cmd->size = wlan_cpu_to_le16(sizeof(mfg_cmd_otp_cal_data_rd_wr_t) +
+				     S_DS_GEN);
+
+	mcmd->mfg_cmd = wlan_cpu_to_le32(cfg->mfg_cmd);
+	mcmd->action = wlan_cpu_to_le16(cfg->action);
+	mcmd->cal_data_status = wlan_cpu_to_le32(cfg->cal_data_status);
+	mcmd->cal_data_len = wlan_cpu_to_le32(cfg->cal_data_len);
+	if (action == HostCmd_ACT_GEN_SET) {
+		memcpy_ext(pmpriv->adapter, mcmd->cal_data, cfg->cal_data,
+			   mcmd->cal_data_len, mcmd->cal_data_len);
+	}
+	LEAVE();
+	return MLAN_STATUS_SUCCESS;
+}
+
+/**
  *  @brief This function prepares command of MFG cmd.
  *
  *  @param pmpriv       A pointer to mlan_private structure
@@ -590,6 +628,10 @@ mlan_status wlan_cmd_mfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		goto cmd_mfg_done;
 	case MFG_CMD_OTP_MAC_ADD:
 		ret = wlan_cmd_mfg_otp_rw(pmpriv, cmd, action, pdata_buf);
+		goto cmd_mfg_done;
+	case MFG_CMD_OTP_CAL_DATA:
+		ret = wlan_cmd_mfg_otp_cal_data_rw(pmpriv, cmd, action,
+						   pdata_buf);
 		goto cmd_mfg_done;
 	case MFG_CMD_SET_TEST_MODE:
 	case MFG_CMD_UNSET_TEST_MODE:
@@ -3611,6 +3653,51 @@ static mlan_status wlan_is_cmd_allowed(mlan_private *priv, t_u16 cmd_no)
 }
 
 /**
+ *  @brief This function prepares command to configure Auth, (Re)assoc Timeout
+ *
+ *  @param pmpriv      A pointer to mlan_private structure
+ *  @param cmd         A pointer to HostCmd_DS_COMMAND structure
+ *  @param cmd_action  Action: GET or SET
+ *  @param pdata_buf   A pointer to data buffer
+ *
+ *  @return            MLAN_STATUS_SUCCESS
+ */
+static mlan_status wlan_cmd_auth_assoc_timeout_cfg(pmlan_private pmpriv,
+						   HostCmd_DS_COMMAND *cmd,
+						   t_u16 cmd_action,
+						   t_void *pdata_buf)
+{
+	HostCmd_DS_AUTH_ASSOC_TIMEOUT_CFG *auth_assoc_cmd =
+		&cmd->params.auth_assoc_cfg;
+	mlan_ds_auth_assoc_timeout_cfg *auth_assoc_cfg =
+		(mlan_ds_auth_assoc_timeout_cfg *)pdata_buf;
+
+	ENTER();
+
+	cmd->command = wlan_cpu_to_le16(HostCmd_CMD_AUTH_ASSOC_TIMEOUT_CFG);
+	cmd->size = wlan_cpu_to_le16(sizeof(HostCmd_DS_AUTH_ASSOC_TIMEOUT_CFG) +
+				     S_DS_GEN);
+
+	auth_assoc_cmd->action = wlan_cpu_to_le16(cmd_action);
+
+	auth_assoc_cmd->auth_timeout =
+		wlan_cpu_to_le16(auth_assoc_cfg->auth_timeout);
+	auth_assoc_cmd->auth_retry_timeout_if_ack =
+		wlan_cpu_to_le16(auth_assoc_cfg->auth_retry_timeout_if_ack);
+	auth_assoc_cmd->auth_retry_timeout_if_no_ack =
+		wlan_cpu_to_le16(auth_assoc_cfg->auth_retry_timeout_if_no_ack);
+	auth_assoc_cmd->assoc_timeout =
+		wlan_cpu_to_le16(auth_assoc_cfg->assoc_timeout);
+	auth_assoc_cmd->reassoc_timeout =
+		wlan_cpu_to_le16(auth_assoc_cfg->reassoc_timeout);
+	auth_assoc_cmd->retry_timeout =
+		wlan_cpu_to_le16(auth_assoc_cfg->retry_timeout);
+
+	LEAVE();
+	return MLAN_STATUS_SUCCESS;
+}
+
+/**
  *  @brief This function prepare the command before sending to firmware.
  *
  *  @param priv       A pointer to mlan_private structure
@@ -3686,6 +3773,10 @@ mlan_status wlan_ops_sta_prepare_cmd(t_void *priv, t_u16 cmd_no,
 	case HostCmd_CMD_802_11_HS_CFG_ENH:
 		ret = wlan_cmd_802_11_hs_cfg(pmpriv, cmd_ptr, cmd_action,
 					     (hs_config_param *)pdata_buf);
+		break;
+	case HostCmd_CMD_802_11_FW_WAKE_METHOD:
+		ret = wlan_cmd_802_11_fw_wakeup_method(pmpriv, cmd_ptr,
+						       cmd_action, pdata_buf);
 		break;
 	case HostCmd_CMD_802_11_ROBUSTCOEX:
 		ret = wlan_cmd_robustcoex(pmpriv, cmd_ptr, cmd_action,
@@ -3803,8 +3894,7 @@ mlan_status wlan_ops_sta_prepare_cmd(t_void *priv, t_u16 cmd_no,
 		if (pmpriv->adapter->hw_status == WlanHardwareStatusReset)
 			pmpriv->adapter->hw_status =
 				WlanHardwareStatusInitializing;
-		cmd_ptr->command = wlan_cpu_to_le16(cmd_no);
-		cmd_ptr->size = wlan_cpu_to_le16(S_DS_GEN);
+		ret = wlan_cmd_func_init(pmpriv, cmd_ptr);
 		break;
 	case HostCmd_CMD_FUNC_SHUTDOWN:
 		pmpriv->adapter->hw_status = WlanHardwareStatusReset;
@@ -3990,6 +4080,12 @@ mlan_status wlan_ops_sta_prepare_cmd(t_void *priv, t_u16 cmd_no,
 		break;
 #endif
 #endif
+#if defined(PCIE)
+	case HostCmd_CMD_PCIE_ADMA_INIT:
+		ret = wlan_cmd_pcie_adma_init(pmpriv, cmd_ptr, cmd_action,
+					      pdata_buf);
+		break;
+#endif
 	case HostCmd_CMD_802_11_REMAIN_ON_CHANNEL:
 		ret = wlan_cmd_remain_on_channel(pmpriv, cmd_ptr, cmd_action,
 						 pdata_buf);
@@ -4080,10 +4176,8 @@ mlan_status wlan_ops_sta_prepare_cmd(t_void *priv, t_u16 cmd_no,
 						     cmd_action, pdata_buf);
 		break;
 	case HostCmd_CMD_CHAN_REGION_CFG:
-		cmd_ptr->command = wlan_cpu_to_le16(cmd_no);
-		cmd_ptr->size = wlan_cpu_to_le16(
-			sizeof(HostCmd_DS_CHAN_REGION_CFG) + S_DS_GEN);
-		cmd_ptr->params.reg_cfg.action = wlan_cpu_to_le16(cmd_action);
+		ret = wlan_cmd_chan_region_cfg(pmpriv, cmd_ptr, cmd_action,
+					       pdata_buf);
 		break;
 	case HostCmd_CMD_REGION_POWER_CFG:
 		cmd_ptr->command = wlan_cpu_to_le16(cmd_no);
@@ -4192,12 +4286,28 @@ mlan_status wlan_ops_sta_prepare_cmd(t_void *priv, t_u16 cmd_no,
 		ret = wlan_cmd_cross_chip_synch(pmpriv, cmd_ptr, cmd_action,
 						pdata_buf);
 		break;
+	case HostCmd_CMD_TSP_CFG:
+		ret = wlan_cmd_tsp_config(pmpriv, cmd_ptr, cmd_action,
+					  pdata_buf);
+		break;
 	case HostCmd_CMD_802_11_TX_FRAME:
 		ret = wlan_cmd_tx_frame(pmpriv, cmd_ptr, cmd_action, pdata_buf);
 		break;
 	case HostCmd_CMD_EDMAC_CFG:
 		ret = wlan_cmd_edmac_cfg(pmpriv, cmd_ptr, cmd_action,
 					 pdata_buf);
+		break;
+	case HostCmd_CMD_PEER_TX_RATE_QUERY:
+		ret = wlan_cmd_sta_tx_rate_req(pmpriv, cmd_ptr, cmd_action,
+					       pdata_buf);
+		break;
+	case HostCmd_CMD_MCLIENT_SCHEDULE_CFG:
+		ret = wlan_cmd_mclient_scheduling_cfg(pmpriv, cmd_ptr,
+						      cmd_action, pdata_buf);
+		break;
+	case HostCmd_CMD_AUTH_ASSOC_TIMEOUT_CFG:
+		ret = wlan_cmd_auth_assoc_timeout_cfg(pmpriv, cmd_ptr,
+						      cmd_action, pdata_buf);
 		break;
 	default:
 		PRINTM(MERROR, "PREP_CMD: unknown command- %#x\n", cmd_no);

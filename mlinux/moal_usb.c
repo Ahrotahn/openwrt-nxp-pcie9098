@@ -35,7 +35,7 @@ extern struct semaphore AddRemoveCardSem;
 ********************************************************/
 
 #if defined(USB8997) || defined(USB9098) || defined(USB9097) ||                \
-	defined(USB8978) || defined(USBIW624) || defined(USBIW615)
+	defined(USB8978) || defined(USBIW624) || defined(USBIW610)
 /** Card-type detection frame response */
 typedef struct {
 	/** 32-bit ACK+WINNER field */
@@ -101,10 +101,10 @@ static struct usb_device_id woal_usb_table[] = {
 	{NXP_USB_DEVICE(USBIW624_VID_1, USBIW624_PID_2,
 			"NXP WLAN USB Adapter")},
 #endif
-#ifdef USBIW615
-	{NXP_USB_DEVICE(USBIW615_VID_1, USBIW615_PID_1,
+#ifdef USBIW610
+	{NXP_USB_DEVICE(USBIW610_VID_1, USBIW610_PID_1,
 			"NXP WLAN USB Adapter")},
-	{NXP_USB_DEVICE(USBIW615_VID_1, USBIW615_PID_2,
+	{NXP_USB_DEVICE(USBIW610_VID_1, USBIW610_PID_2,
 			"NXP WLAN USB Adapter")},
 #endif
 	/* Terminating entry */
@@ -138,8 +138,8 @@ static struct usb_device_id woal_usb_table_skip_fwdnld[] = {
 	{NXP_USB_DEVICE(USBIW624_VID_1, USBIW624_PID_2,
 			"NXP WLAN USB Adapter")},
 #endif
-#ifdef USBIW615
-	{NXP_USB_DEVICE(USBIW615_VID_1, USBIW615_PID_2,
+#ifdef USBIW610
+	{NXP_USB_DEVICE(USBIW610_VID_1, USBIW610_PID_2,
 			"NXP WLAN USB Adapter")},
 #endif
 	/* Terminating entry */
@@ -507,7 +507,7 @@ rx_ret:
 ********************************************************/
 
 #if defined(USB8997) || defined(USB9098) || defined(USB9097) ||                \
-	defined(USB8978) || defined(USBIW624) || defined(USBIW615)
+	defined(USB8978) || defined(USBIW624) || defined(USBIW610)
 /**
  *  @brief  Check chip revision
  *
@@ -836,18 +836,18 @@ static t_u16 woal_update_card_type(t_void *card)
 					strlen(KERN_VERSION));
 	}
 #endif
-#ifdef USBIW615
+#ifdef USBIW610
 	if (woal_cpu_to_le16(cardp_usb->udev->descriptor.idProduct) ==
-		    (__force __le16)USBIW615_PID_1 ||
+		    (__force __le16)USBIW610_PID_1 ||
 	    woal_cpu_to_le16(cardp_usb->udev->descriptor.idProduct) ==
-		    (__force __le16)USBIW615_PID_2) {
-		card_type = CARD_TYPE_USBIW615;
-		moal_memcpy_ext(NULL, driver_version, CARD_USBIW615,
-				strlen(CARD_USBIW615), strlen(driver_version));
+		    (__force __le16)USBIW610_PID_2) {
+		card_type = CARD_TYPE_USBIW610;
+		moal_memcpy_ext(NULL, driver_version, CARD_USBIW610,
+				strlen(CARD_USBIW610), strlen(driver_version));
 		moal_memcpy_ext(NULL,
 				driver_version + strlen(INTF_CARDTYPE) +
 					strlen(KERN_VERSION),
-				V17, strlen(V17),
+				V18, strlen(V18),
 				strlen(driver_version) - strlen(INTF_CARDTYPE) -
 					strlen(KERN_VERSION));
 	}
@@ -922,9 +922,9 @@ static int woal_usb_probe(struct usb_interface *intf,
 #ifdef USBIW624
 			case (__force __le16)USBIW624_PID_1:
 #endif /* USBIW624 */
-#ifdef USBIW615
-			case (__force __le16)USBIW615_PID_1:
-#endif /* USBIW615 */
+#ifdef USBIW610
+			case (__force __le16)USBIW610_PID_1:
+#endif /* USBIW610 */
 
 				/* If skip FW is set, we must return error so
 				 * the next driver can download the FW */
@@ -955,9 +955,9 @@ static int woal_usb_probe(struct usb_interface *intf,
 #ifdef USBIW624
 			case (__force __le16)USBIW624_PID_2:
 #endif /* USBIW624 */
-#ifdef USBIW615
-			case (__force __le16)USBIW615_PID_2:
-#endif /* USBIW615 */
+#ifdef USBIW610
+			case (__force __le16)USBIW610_PID_2:
+#endif /* USBIW610 */
 
 				usb_cardp->boot_state = USB_FW_READY;
 				break;
@@ -2097,7 +2097,7 @@ static mlan_status woal_usb_get_fw_name(moal_handle *handle)
 {
 	mlan_status ret = MLAN_STATUS_SUCCESS;
 #if defined(USB8997) || defined(USB9098) || defined(USB9097) ||                \
-	defined(USB8978) || defined(USBIW624) || defined(USBIW615)
+	defined(USB8978) || defined(USBIW624) || defined(USBIW610)
 	t_u32 revision_id = 0;
 	t_u32 strap = 0;
 	t_u32 boot_mode = 0;
@@ -2118,7 +2118,7 @@ static mlan_status woal_usb_get_fw_name(moal_handle *handle)
 #endif
 
 #if defined(USB8997) || defined(USB9098) || defined(USB9097) ||                \
-	defined(USB8978) || defined(USBIW624) || defined(USBIW615)
+	defined(USB8978) || defined(USBIW624) || defined(USBIW610)
 	ret = woal_check_chip_revision(handle, &revision_id, &strap,
 				       &boot_mode);
 	if (ret != MLAN_STATUS_SUCCESS) {
@@ -2236,14 +2236,42 @@ static mlan_status woal_usb_get_fw_name(moal_handle *handle)
 				USBUSBIW624_COMBO_FW_NAME, FW_NAMW_MAX_LEN);
 	}
 #endif
-#ifdef USBIW615
-	if (IS_USBIW615(handle->card_type)) {
-		if (strap == CARD_TYPE_USB_UART)
-			strcpy(handle->card_info->fw_name,
-			       USBUARTIW615_COMBO_FW_NAME);
-		else
-			strcpy(handle->card_info->fw_name,
-			       USBUSBIW615_COMBO_FW_NAME);
+#ifdef USBIW610
+	if (IS_USBIW610(handle->card_type)) {
+		if (boot_mode == 0x03)
+			PRINTM(MMSG, "wlan: USB-IW610 in secure-boot mode\n");
+		if (strap == CARD_TYPE_USBIW610_UART) {
+			if (handle->params.dual_nb)
+				strncpy(handle->card_info->fw_name,
+					USBUARTSPIIW610_COMBO_FW_NAME,
+					FW_NAMW_MAX_LEN);
+			else
+				strncpy(handle->card_info->fw_name,
+					USBUARTIW610_COMBO_FW_NAME,
+					FW_NAMW_MAX_LEN);
+		} else if (strap == CARD_TYPE_USBIW610_USB) {
+			if (handle->params.dual_nb)
+				strncpy(handle->card_info->fw_name,
+					USBUSBSPIIW610_COMBO_FW_NAME,
+					FW_NAMW_MAX_LEN);
+			else
+				strncpy(handle->card_info->fw_name,
+					USBUSBIW610_COMBO_FW_NAME,
+					FW_NAMW_MAX_LEN);
+		}
+		strncpy(handle->card_info->fw_name_wlan,
+			USBIW610_DEFAULT_WLAN_FW_NAME, FW_NAMW_MAX_LEN);
+		if (boot_mode != 0x03) {
+			/* remove extension .se */
+			if (strstr(handle->card_info->fw_name, ".se"))
+				memset(strstr(handle->card_info->fw_name,
+					      ".se"),
+				       '\0', sizeof(".se"));
+			if (strstr(handle->card_info->fw_name_wlan, ".se"))
+				memset(strstr(handle->card_info->fw_name_wlan,
+					      ".se"),
+				       '\0', sizeof(".se"));
+		}
 	}
 #endif
 

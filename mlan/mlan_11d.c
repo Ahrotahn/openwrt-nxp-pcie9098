@@ -36,16 +36,8 @@ Change log:
 ********************************************************/
 
 #ifdef STA_SUPPORT
-/** Region code mapping */
-typedef struct _region_code_mapping {
-	/** Region */
-	t_u8 region[COUNTRY_CODE_LEN];
-	/** Code */
-	t_u8 code;
-} region_code_mapping_t;
-
 /** Region code mapping table */
-static region_code_mapping_t region_code_mapping[] = {
+region_code_mapping_t region_code_mapping[] = {
 	{"US ", 0x10}, /* US FCC      */
 	{"CA ", 0x20}, /* IC Canada   */
 	{"SG ", 0x10}, /* Singapore   */
@@ -115,6 +107,7 @@ static chan_freq_power_t channel_freq_power_UN_AJ[] = {
 	{132, 5660, TX_PWR_DEFAULT, MTRUE, {0x13, 0, 0}},
 	{136, 5680, TX_PWR_DEFAULT, MTRUE, {0x13, 0, 0}},
 	{140, 5700, TX_PWR_DEFAULT, MTRUE, {0x13, 0, 0}},
+	{144, 5720, TX_PWR_DEFAULT, MTRUE, {0x13, 0, 0}},
 	{149, 5745, TX_PWR_DEFAULT, MFALSE, {0x10, 0, 0}},
 	{153, 5765, TX_PWR_DEFAULT, MFALSE, {0x10, 0, 0}},
 	{157, 5785, TX_PWR_DEFAULT, MFALSE, {0x10, 0, 0}},
@@ -145,7 +138,7 @@ static chan_freq_power_t channel_freq_power_UN_AJ[] = {
  *
  *  @return             Region string
  */
-static t_u8 *wlan_11d_code_2_region(pmlan_adapter pmadapter, t_u8 code)
+t_u8 *wlan_11d_code_2_region(pmlan_adapter pmadapter, t_u8 code)
 {
 	t_u8 i;
 

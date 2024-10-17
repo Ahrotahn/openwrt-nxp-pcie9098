@@ -50,6 +50,8 @@ CONFIG_PCIE9097=n
 CONFIG_SD9098=y
 CONFIG_USB9098=n
 CONFIG_PCIE9098=y
+CONFIG_SDIW610=y
+CONFIG_USBIW610=n
 CONFIG_SDIW624=n
 CONFIG_SDAW693=n
 CONFIG_PCIEIW624=n
@@ -186,7 +188,7 @@ APPDIR= $(shell if test -d "mapp"; then echo mapp; fi)
 #############################################################################
 
 	ccflags-y += -I$(KERNELDIR)/include
-	ccflags-y += -DMLAN_RELEASE_VERSION='"437.p30"'
+	ccflags-y += -DMLAN_RELEASE_VERSION='"505.p1"'
 
 	ccflags-y += -DFPNUM='"92"'
 
@@ -303,6 +305,10 @@ ifeq ($(CONFIG_SD9097),y)
 	CONFIG_SDIO=y
 	ccflags-y += -DSD9097
 endif
+ifeq ($(CONFIG_SDIW610),y)
+	CONFIG_SDIO=y
+	ccflags-y += -DSDIW610
+endif
 ifeq ($(CONFIG_SDIW624),y)
 	CONFIG_SDIO=y
 	ccflags-y += -DSDIW624
@@ -342,6 +348,10 @@ endif
 ifeq ($(CONFIG_USB9097),y)
 	CONFIG_MUSB=y
 	ccflags-y += -DUSB9097
+endif
+ifeq ($(CONFIG_USBIW610),y)
+	CONFIG_MUSB=y
+	ccflags-y += -DUSBIW610
 endif
 ifeq ($(CONFIG_USBIW624),y)
 	CONFIG_MUSB=y

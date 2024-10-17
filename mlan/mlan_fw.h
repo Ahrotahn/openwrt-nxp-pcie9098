@@ -156,6 +156,30 @@ extern t_u8 SupportedRates_BG[BG_SUPPORTED_RATES];
 extern t_u8 SupportedRates_A[A_SUPPORTED_RATES];
 extern t_u8 SupportedRates_N[N_SUPPORTED_RATES];
 
+#define MAX_FW_DATA_BLOCK 8
+#if defined(USB8978) || defined(SD8978)
+/** Fw custom data */
+#define FW_DATA_FW_REMAP_CONFIG_LEN 44
+extern t_u8 fw_data_fw_remap_config[FW_DATA_FW_REMAP_CONFIG_LEN];
+#endif
+#if defined(USB8978)
+#define FW_DATA_USB_BULK_EP_LEN 36
+extern t_u8 fw_data_usb_bulk_ep[FW_DATA_USB_BULK_EP_LEN];
+#endif
+#if defined(USB8978) || defined(SD8978)
+#define FW_DATA_DPD_CURRENT_OPT_LEN 36
+extern t_u8 fw_data_dpd_current_opt[FW_DATA_DPD_CURRENT_OPT_LEN];
+#endif
+
+/** Firmware wakeup method : Unchanged */
+#define WAKEUP_FW_UNCHANGED 0
+/** Firmware wakeup method : Through interface */
+#define WAKEUP_FW_THRU_INTERFACE 1
+/** Firmware wakeup method : Through GPIO*/
+#define WAKEUP_FW_THRU_GPIO 2
+/** Default value of GPIO */
+#define DEF_WAKEUP_FW_GPIO 0
+
 /** Default auto deep sleep mode */
 #define DEFAULT_AUTO_DS_MODE MTRUE
 /** Default power save mode */
@@ -820,12 +844,15 @@ typedef enum _WLAN_802_11_WEP_STATUS {
 #define MOD_CLASS_HT 0x08
 /** Modulation class for VHT Rates */
 #define MOD_CLASS_VHT 0x09
-/** HT bandwidth 20 MHz */
-#define HT_BW_20 0
-/** HT bandwidth 40 MHz */
-#define HT_BW_40 1
-/** HT bandwidth 80 MHz */
-#define HT_BW_80 2
+/** Modulation class for HE Rates */
+#define MOD_CLASS_HE 0x0A
+
+/** HT/VHT/HE bandwidth 20 MHz */
+#define BW_20 0
+/** HT/VHT/HE bandwidth 40 MHz */
+#define BW_40 1
+/** HT/VHT/HE bandwidth 80 MHz */
+#define BW_80 2
 
 /** Firmware Host Command ID Constants */
 
@@ -1154,6 +1181,7 @@ typedef enum _ENH_PS_MODES {
 #define HostCmd_ACT_GEN_REMOVE 0x0004
 /** General purpose action : Reset */
 #define HostCmd_ACT_GEN_RESET 0x0005
+
 /** Host command action : Set Rx */
 #define HostCmd_ACT_SET_RX 0x0001
 /** Host command action : Set Tx */
@@ -2474,6 +2502,16 @@ typedef MLAN_PACK_START struct _filter_entry {
 	t_u32 ipv4_addr;
 } MLAN_PACK_END filter_entry;
 
+#define NUM_EVT_MASK_BITMAP 10
+typedef struct _HostCmd_DS_EVENT_MASK_CFG {
+	/** Get / Set action*/
+	t_u8 action;
+	/** feature enabled or disabled */
+	t_u8 enabled;
+	/** Bit map of the masked events. 1 - masked, 0 - allowed */
+	t_u32 events_bitmap[NUM_EVT_MASK_BITMAP];
+} MLAN_PACK_END HostCmd_DS_EVENT_MASK_CFG;
+
 typedef MLAN_PACK_START struct _HostCmd_DS_MEF_CFG {
 	/** Criteria */
 	t_u32 criteria;
@@ -3192,6 +3230,8 @@ typedef MLAN_PACK_START struct _HostCmd_DS_802_11_GET_LOG {
 	t_u32 gdma_abort_cnt;
 	/** Rx Reset MAC Count */
 	t_u32 g_reset_rx_mac_cnt;
+	/** SDMA FSM stuck Count*/
+	t_u32 SdmaStuckCnt;
 	// Ownership error counters
 	/*Error Ownership error count*/
 	t_u32 dwCtlErrCnt;
@@ -3521,6 +3561,15 @@ typedef MLAN_PACK_START struct _HostCmd_DS_802_11_HS_CFG_ENH {
 	} params;
 } MLAN_PACK_END HostCmd_DS_802_11_HS_CFG_ENH;
 
+/** HostCmd_CMD_802_11_FW_WAKE_METHOD */
+typedef MLAN_PACK_START struct _HostCmd_DS_802_11_FW_WAKEUP_METHOD {
+	/** Action */
+	t_u16 action;
+	/** Method */
+	t_u16 method;
+	t_u8 tlv_buf[];
+} MLAN_PACK_END HostCmd_DS_802_11_FW_WAKEUP_METHOD;
+
 /** HostCmd_CMD_802_11_ROBUSTCOEX */
 typedef MLAN_PACK_START struct _HostCmd_DS_802_11_ROBUSTCOEX {
 	/** Action */
@@ -3723,6 +3772,25 @@ typedef MLAN_PACK_START struct _HostCmd_DS_TX_RATE_CFG {
 	t_u8 tlv_buf[];
 } MLAN_PACK_END HostCmd_DS_TX_RATE_CFG;
 
+/** HostCmd_DS_FUNC_INIT */
+typedef MLAN_PACK_START struct _HostCmd_DS_FUNC_INIT {
+	/* MrvlIEtypes_boot_time_cfg_t */
+	t_u8 tlv_buf[0];
+} MLAN_PACK_END HostCmd_DS_FUNC_INIT;
+
+/** BootTimeCfg TLV */
+typedef MLAN_PACK_START struct _MrvlIEtypes_boot_time_cfg_t {
+	/** Header type */
+	t_u16 type;
+	/** Header length */
+	t_u16 len;
+	/* enable: 1: enable boot time optimization 0: disable boot time
+	 * optimization */
+	t_u8 enable;
+	/* reserved */
+	t_u8 reserve[3];
+} MLAN_PACK_END MrvlIEtypes_boot_time_cfg_t, *pMrvlIEtypes_boot_time_cfg_t;
+
 /** Power_Group_t */
 typedef MLAN_PACK_START struct _Power_Group_t {
 	/** Modulation Class */
@@ -3924,6 +3992,31 @@ typedef MLAN_PACK_START struct _HostCmd_DS_CROSS_CHIP_SYNCH {
 	/**cross chip synch intial TSF high */
 	t_u32 init_tsf_high;
 } MLAN_PACK_END HostCmd_DS_CROSS_CHIP_SYNCH;
+
+typedef MLAN_PACK_START struct _HostCmd_DS_TSP_CFG {
+	/** TSP config action 0-GET, 1-SET */
+	t_u16 action;
+	/** TSP enable/disable tsp algothrim */
+	t_u16 enable;
+	/** TSP config power backoff */
+	t_s32 backoff;
+	/** TSP config high threshold */
+	t_s32 high_thrshld;
+	/** TSP config low threshold */
+	t_s32 low_thrshld;
+	/** TSP config DUTY_CYC_STEP */
+	t_s32 duty_cyc_step;
+	/** TSP config DUTY_CYC_MIN */
+	t_s32 duty_cyc_min;
+	/** TSP config HIGH_THRESHOLD_TEMP */
+	t_s32 high_thrshld_temp;
+	/** TSP config LOW_THRESHOLD_TEMP */
+	t_s32 low_thrshld_temp;
+	/** TSP CAU TSEN read value */
+	t_s32 reg_cau_val;
+	/** TSP RFU read values */
+	t_s32 reg_rfu_val[MAX_RFUS][MAX_PATHS];
+} MLAN_PACK_END HostCmd_DS_TSP_CFG;
 
 MLAN_PACK_START struct coalesce_filt_field_param {
 	t_u8 operation;
@@ -4444,8 +4537,8 @@ typedef struct MLAN_PACK_START _hostcmd_twt_setup {
 	t_u8 twt_request;
 	/** TWT Setup State. Set to 0 by driver, filled by FW in response*/
 	t_u8 twt_setup_state;
-	/** Reserved, set to 0. */
-	t_u8 reserved[2];
+	/** TWT link lost timeout threshold */
+	t_u16 bcnMiss_threshold;
 } MLAN_PACK_END hostcmd_twt_setup, *phostcmd_twt_setup;
 
 /** Type definition of hostcmd_twt_teardown */
@@ -5164,6 +5257,8 @@ typedef MLAN_PACK_START struct _HostCmd_DS_VERSION_EXT {
 typedef MLAN_PACK_START struct _HostCmd_DS_CHAN_REGION_CFG {
 	/** Action */
 	t_u16 action;
+	/** TLV buffer */
+	t_u8 tlv_buffer[1];
 } MLAN_PACK_END HostCmd_DS_CHAN_REGION_CFG;
 
 /** HostCmd_DS_REGION_POWER_CFG */
@@ -6745,6 +6840,20 @@ typedef MLAN_PACK_START struct _dual_desc_buf {
 	t_u64 paddr;
 } MLAN_PACK_END adma_dual_desc_buf, *padma_dual_desc_buf;
 
+/** PCIE ADMA configuration */
+typedef MLAN_PACK_START struct _HostCmd_DS_PCIE_ADMA_INIT {
+	/* tx adma ring size */
+	t_u16 tx_ring_size;
+	/* rx adma ring size */
+	t_u16 rx_ring_size;
+	/* event adma ring size */
+	t_u16 evt_ring_size;
+	/* interrupt mode: 0-legacy 1-msi 2-msix */
+	t_u8 int_mode;
+	/** reserved */
+	t_u8 reserved;
+} HostCmd_DS_PCIE_ADMA_INIT;
+
 #if defined(PCIE8997) || defined(PCIE8897)
 /** PCIE ring buffer description for DATA */
 typedef MLAN_PACK_START struct _mlan_pcie_data_buf {
@@ -7296,6 +7405,52 @@ typedef MLAN_PACK_START struct _HostCmd_DS_EDMAC_CFG {
 	t_u32 ed_bitmap_txq_lock;
 } MLAN_PACK_END HostCmd_DS_EDMAC_CFG;
 
+/* Auth, Assoc Timeout configuration: HostCmd_DS_AUTH_ASSOC_TIMEOUT_CFG */
+typedef MLAN_PACK_START struct _HostCmd_DS_AUTH_ASSOC_TIMEOUT_CFG {
+	/** Action */
+	t_u16 action;
+	/** auth timeout */
+	t_u16 auth_timeout;
+	/** Auth retry timeout if received ack */
+	t_u16 auth_retry_timeout_if_ack;
+	/** Auth retry timeout if ack is not received */
+	t_u16 auth_retry_timeout_if_no_ack;
+	/** assoc timeout */
+	t_u16 assoc_timeout;
+	/** reassoc timeout */
+	t_u16 reassoc_timeout;
+	/** assoc/reassoc frame retry timeout if ack received */
+	t_u16 retry_timeout;
+} MLAN_PACK_END HostCmd_DS_AUTH_ASSOC_TIMEOUT_CFG;
+
+/* maximum number of STAs HostCmd_CMD_802_11_STA_TX_RATE can have */
+enum { MAX_STA_IN_TX_RATE_REQ = 32 };
+
+/** HostCmd_CMD_802_11_STA_TX_RATE */
+typedef MLAN_PACK_START struct _HostCmd_CMD_802_11_STA_TX_RATE {
+	struct {
+		/** STA`s MAC */
+		t_u8 sta_mac[MLAN_MAC_ADDR_LENGTH];
+		/** TX rate */
+		HostCmd_TX_RATE_QUERY rate;
+	} entry[MAX_STA_IN_TX_RATE_REQ];
+
+	/** actual number of entries in array */
+	t_u16 num_entries;
+} HostCmd_CMD_802_11_STA_TX_RATE;
+
+/** HostCmd_MCLIENT_SCHEDULE_CFG */
+typedef MLAN_PACK_START struct _HostCmd_MCLIENT_SCHEDULE_CFG {
+	/** action - get/set */
+	t_u16 action;
+
+	/** enable multi-client scheduliing */
+	t_u8 mclient_enable;
+
+	/** enable PS mode change reporting */
+	t_u8 ps_mode_change_report;
+} HostCmd_MCLIENT_SCHEDULE_CFG;
+
 /** HostCmd_DS_COMMAND */
 typedef struct MLAN_PACK_START _HostCmd_DS_COMMAND {
 	/** Command Header : Command */
@@ -7353,9 +7508,12 @@ typedef struct MLAN_PACK_START _HostCmd_DS_COMMAND {
 		/** RF antenna */
 		HostCmd_DS_802_11_RF_ANTENNA antenna;
 
+		/** Function Init */
+		HostCmd_DS_FUNC_INIT func_init;
 		/** Enhanced power save command */
 		HostCmd_DS_802_11_PS_MODE_ENH psmode_enh;
 		HostCmd_DS_802_11_HS_CFG_ENH opt_hs_cfg;
+		HostCmd_DS_802_11_FW_WAKEUP_METHOD fwwakeupmethod;
 		/** Scan */
 		HostCmd_DS_802_11_SCAN scan;
 		/** Extended Scan */
@@ -7488,6 +7646,9 @@ typedef struct MLAN_PACK_START _HostCmd_DS_COMMAND {
 		HostCmd_DS_PCIE_HOST_BUF_DETAILS pcie_host_spec;
 #endif
 #endif
+#if defined(PCIE)
+		HostCmd_DS_PCIE_ADMA_INIT pcie_adma_config;
+#endif
 		HostCmd_DS_REMAIN_ON_CHANNEL remain_on_chan;
 #ifdef WIFI_DIRECT_SUPPORT
 		HostCmd_DS_WIFI_DIRECT_MODE wifi_direct_mode;
@@ -7564,6 +7725,7 @@ typedef struct MLAN_PACK_START _HostCmd_DS_COMMAND {
 		struct mfg_Cmd_HE_TBTx_t mfg_he_power;
 		mfg_Cmd_IEEEtypes_CtlBasicTrigHdr_t mfg_tx_trigger_config;
 		mfg_cmd_otp_mac_addr_rd_wr_t mfg_otp_mac_addr_rd_wr;
+		mfg_cmd_otp_cal_data_rd_wr_t mfg_otp_cal_data_rd_wr;
 		HostCmd_DS_CMD_ARB_CONFIG arb_cfg;
 		HostCmd_DS_CMD_DOT11MC_UNASSOC_FTM_CFG dot11mc_unassoc_ftm_cfg;
 		HostCmd_DS_HAL_PHY_CFG hal_phy_cfg_params;
@@ -7572,15 +7734,21 @@ typedef struct MLAN_PACK_START _HostCmd_DS_COMMAND {
 		HostCmd_DS_STATS stats;
 		HostCmd_DS_GET_CH_LOAD ch_load;
 		HostCmd_DS_CROSS_CHIP_SYNCH cross_chip_synch;
+		HostCmd_DS_TSP_CFG tsp_cfg;
 		HostCmd_DS_80211_TX_FRAME tx_frame;
 
 		HostCmd_DS_EDMAC_CFG ed_mac_cfg;
 		HostCmd_gpio_cfg_ops gpio_cfg_ops;
 
+		HostCmd_CMD_802_11_STA_TX_RATE sta_rx_rate;
+		HostCmd_MCLIENT_SCHEDULE_CFG mclient_cfg;
+
 		/** WMM HOST ADDTS */
 		HostCmd_DS_WMM_HOST_ADDTS_REQ host_add_ts;
 		/** WMM HOST DELTS */
 		HostCmd_DS_WMM_HOST_DELTS_REQ host_del_ts;
+		/** Auth, (Re)Assoc timeout configuration */
+		HostCmd_DS_AUTH_ASSOC_TIMEOUT_CFG auth_assoc_cfg;
 	} params;
 } MLAN_PACK_END HostCmd_DS_COMMAND, *pHostCmd_DS_COMMAND;
 
@@ -7617,6 +7785,11 @@ typedef MLAN_PACK_START struct _MrvlIEtypes_Secure_Boot_Uuid_t {
 	t_u64 uuid_hi;
 } MLAN_PACK_END MrvlIEtypes_Secure_Boot_Uuid_t;
 
+typedef MLAN_PACK_START struct _MrvlIEtypes_PsStaStatus_t {
+	t_u8 mac[MLAN_MAC_ADDR_LENGTH];
+	t_u8 sleep;
+} MLAN_PACK_END MrvlIEtypes_PsStaStatus_t;
+
 /** req host side download vdll block */
 #define VDLL_IND_TYPE_REQ 0
 /** notify vdll start offset in firmware image */
@@ -7641,6 +7814,36 @@ typedef MLAN_PACK_START struct _vdll_ind {
 	/*VDLL block size*/
 	t_u16 block_len;
 } MLAN_PACK_END vdll_ind, *pvdll_ind;
+
+typedef MLAN_PACK_START struct _MrvlIEtypes_MclientFwCaps_t {
+	/** Header */
+	MrvlIEtypesHeader_t header;
+
+	/* max number of supported TX BA streams */
+	t_u32 tx_ba_stream_limit;
+
+	/* estimated FW MPDU PPS performance */
+	t_u32 tx_mpdu_with_amsdu_pps;
+	t_u32 tx_mpdu_no_amsdu_pps;
+
+	/* timeout support for TX BA */
+	t_u8 tx_ba_timeout_support;
+
+	t_u8 __padding[3];
+} MLAN_PACK_END MrvlIEtypes_MclientFwCaps_t;
+
+/** Fw custom data structure */
+typedef struct MLAN_PACK_START _fw_data_t {
+	t_u8 *fw_data_buffer;
+	t_u8 fw_data_buffer_len;
+} MLAN_PACK_END fw_data_t;
+
+typedef enum _BLOCK_6G_CHAN_SWITCH_REASON {
+	BLOCK_6G_CHAN_SWITCH_REASON_MMH = 1,
+	BLOCK_6G_CHAN_SWITCH_REASON_MMH_STA = 2,
+	BLOCK_6G_CHAN_SWITCH_REASON_STA_MMH = 3,
+	BLOCK_6G_CHAN_SWITCH_REASON_STA_RX_ECSA = 4,
+} BLOCK_6G_CHAN_SWITCH_REASON;
 
 #ifdef PRAGMA_PACK
 #pragma pack(pop)

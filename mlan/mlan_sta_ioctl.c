@@ -692,47 +692,39 @@ static mlan_status wlan_bss_ioctl_set_multicast_list(pmlan_adapter pmadapter,
 	}
 	pioctl_req->data_read_written =
 		sizeof(mlan_multicast_list) + MLAN_SUB_COMMAND_SIZE;
-	if (bss->param.multicast_list.mode == MLAN_PROMISC_MODE) {
-		PRINTM(MINFO, "Enable Promiscuous mode\n");
-		pmpriv->curr_pkt_filter |= HostCmd_ACT_MAC_PROMISCUOUS_ENABLE;
+	/* Multicast */
+	pmpriv->curr_pkt_filter &= ~HostCmd_ACT_MAC_PROMISCUOUS_ENABLE;
+	if (bss->param.multicast_list.mode == MLAN_ALL_MULTI_MODE) {
+		PRINTM(MINFO, "Enabling All Multicast!\n");
+		pmpriv->curr_pkt_filter |= HostCmd_ACT_MAC_ALL_MULTICAST_ENABLE;
+	} else {
 		pmpriv->curr_pkt_filter &=
 			~HostCmd_ACT_MAC_ALL_MULTICAST_ENABLE;
-	} else {
-		/* Multicast */
-		pmpriv->curr_pkt_filter &= ~HostCmd_ACT_MAC_PROMISCUOUS_ENABLE;
-		if (bss->param.multicast_list.mode == MLAN_ALL_MULTI_MODE) {
-			PRINTM(MINFO, "Enabling All Multicast!\n");
+		if (bss->param.multicast_list.mode == MLAN_PROMISC_MODE)
 			pmpriv->curr_pkt_filter |=
-				HostCmd_ACT_MAC_ALL_MULTICAST_ENABLE;
-		} else {
-			pmpriv->curr_pkt_filter &=
-				~HostCmd_ACT_MAC_ALL_MULTICAST_ENABLE;
-			if (bss->param.multicast_list.num_multicast_addr) {
-				PRINTM(MINFO, "Set multicast list=%d\n",
-				       bss->param.multicast_list
-					       .num_multicast_addr);
-				/* Set multicast addresses to firmware */
-				if (old_pkt_filter == pmpriv->curr_pkt_filter) {
-					/* Send request to firmware */
-					ret = wlan_prepare_cmd(
-						pmpriv,
-						HostCmd_CMD_MAC_MULTICAST_ADR,
-						HostCmd_ACT_GEN_SET, 0,
-						(t_void *)pioctl_req,
-						&bss->param.multicast_list);
-					if (ret == MLAN_STATUS_SUCCESS)
-						ret = MLAN_STATUS_PENDING;
-				} else {
-					/* Send request to firmware */
-					ret = wlan_prepare_cmd(
-						pmpriv,
-						HostCmd_CMD_MAC_MULTICAST_ADR,
-						HostCmd_ACT_GEN_SET, 0, MNULL,
-						&bss->param.multicast_list);
-				}
-				if (ret)
-					goto exit;
+				HostCmd_ACT_MAC_PROMISCUOUS_ENABLE;
+		if (bss->param.multicast_list.num_multicast_addr) {
+			PRINTM(MINFO, "Set multicast list=%d\n",
+			       bss->param.multicast_list.num_multicast_addr);
+			/* Set multicast addresses to firmware */
+			if (old_pkt_filter == pmpriv->curr_pkt_filter) {
+				/* Send request to firmware */
+				ret = wlan_prepare_cmd(
+					pmpriv, HostCmd_CMD_MAC_MULTICAST_ADR,
+					HostCmd_ACT_GEN_SET, 0,
+					(t_void *)pioctl_req,
+					&bss->param.multicast_list);
+				if (ret == MLAN_STATUS_SUCCESS)
+					ret = MLAN_STATUS_PENDING;
+			} else {
+				/* Send request to firmware */
+				ret = wlan_prepare_cmd(
+					pmpriv, HostCmd_CMD_MAC_MULTICAST_ADR,
+					HostCmd_ACT_GEN_SET, 0, MNULL,
+					&bss->param.multicast_list);
 			}
+			if (ret)
+				goto exit;
 		}
 	}
 	PRINTM(MINFO, "old_pkt_filter=0x%x, curr_pkt_filter=0x%x\n",
@@ -1601,6 +1593,10 @@ static mlan_status wlan_power_ioctl_set_power(pmlan_adapter pmadapter,
 				  *)(buf + sizeof(HostCmd_DS_TXPWR_CFG));
 		pg_tlv->type = TLV_TYPE_POWER_GROUP;
 		pg_tlv->length = 4 * sizeof(Power_Group_t);
+		/*Power Groups for VHTBW20, VHTBW40, VHTBW80 */
+		pg_tlv->length += 3 * sizeof(Power_Group_t);
+		/*Power Groups for HEBW20, HEBW40, HEBW80 */
+		pg_tlv->length += 3 * sizeof(Power_Group_t);
 		pg = (Power_Group_t *)(buf + sizeof(HostCmd_DS_TXPWR_CFG) +
 				       sizeof(MrvlTypes_Power_Group_t));
 		/* Power group for modulation class HR/DSSS */
@@ -1626,7 +1622,7 @@ static mlan_status wlan_power_ioctl_set_power(pmlan_adapter pmadapter,
 		pg->power_step = 0;
 		pg->power_min = (t_s8)dbm;
 		pg->power_max = (t_s8)dbm;
-		pg->ht_bandwidth = HT_BW_20;
+		pg->ht_bandwidth = BW_20;
 		pg++;
 		/* Power group for modulation class HTBW40 */
 		pg->first_rate_code = 0x00;
@@ -1635,7 +1631,61 @@ static mlan_status wlan_power_ioctl_set_power(pmlan_adapter pmadapter,
 		pg->power_step = 0;
 		pg->power_min = (t_s8)dbm;
 		pg->power_max = (t_s8)dbm;
-		pg->ht_bandwidth = HT_BW_40;
+		pg->ht_bandwidth = BW_40;
+		pg++;
+		/* Power group for modulation class VHTBW20 */
+		pg->first_rate_code = 0x00;
+		pg->last_rate_code = 0x19;
+		pg->modulation_class = MOD_CLASS_VHT;
+		pg->power_step = 0;
+		pg->power_min = (t_s8)dbm;
+		pg->power_max = (t_s8)dbm;
+		pg->ht_bandwidth = BW_20;
+		pg++;
+		/* Power group for modulation class VHTBW40 */
+		pg->first_rate_code = 0x00;
+		pg->last_rate_code = 0x19;
+		pg->modulation_class = MOD_CLASS_VHT;
+		pg->power_step = 0;
+		pg->power_min = (t_s8)dbm;
+		pg->power_max = (t_s8)dbm;
+		pg->ht_bandwidth = BW_40;
+		pg++;
+		/* Power group for modulation class VHTBW80 */
+		pg->first_rate_code = 0x00;
+		pg->last_rate_code = 0x19;
+		pg->modulation_class = MOD_CLASS_VHT;
+		pg->power_step = 0;
+		pg->power_min = (t_s8)dbm;
+		pg->power_max = (t_s8)dbm;
+		pg->ht_bandwidth = BW_80;
+		pg++;
+		/* Power group for modulation class HEBW20 */
+		pg->first_rate_code = 0x00;
+		pg->last_rate_code = 0x1B;
+		pg->modulation_class = MOD_CLASS_HE;
+		pg->power_step = 0;
+		pg->power_min = (t_s8)dbm;
+		pg->power_max = (t_s8)dbm;
+		pg->ht_bandwidth = BW_20;
+		pg++;
+		/* Power group for modulation class HEBW40 */
+		pg->first_rate_code = 0x00;
+		pg->last_rate_code = 0x1B;
+		pg->modulation_class = MOD_CLASS_HE;
+		pg->power_step = 0;
+		pg->power_min = (t_s8)dbm;
+		pg->power_max = (t_s8)dbm;
+		pg->ht_bandwidth = BW_40;
+		pg++;
+		/* Power group for modulation class HEBW80 */
+		pg->first_rate_code = 0x00;
+		pg->last_rate_code = 0x1B;
+		pg->modulation_class = MOD_CLASS_HE;
+		pg->power_step = 0;
+		pg->power_min = (t_s8)dbm;
+		pg->power_max = (t_s8)dbm;
+		pg->ht_bandwidth = BW_80;
 	}
 
 	/* Send request to firmware */
@@ -2247,6 +2297,9 @@ static mlan_status wlan_pm_ioctl(pmlan_adapter pmadapter,
 	case MLAN_OID_PM_CFG_SLEEP_PD:
 		status = wlan_set_get_sleep_pd(pmadapter, pioctl_req);
 		break;
+	case MLAN_OID_PM_CFG_FW_WAKEUP_METHOD:
+		status = wlan_fw_wakeup_method(pmadapter, pioctl_req);
+		break;
 	case MLAN_OID_PM_CFG_SLEEP_PARAMS:
 		status = wlan_set_get_sleep_params(pmadapter, pioctl_req);
 		break;
@@ -2842,8 +2895,8 @@ static mlan_status wlan_sec_ioctl_set_wpa_key(pmlan_adapter pmadapter,
 	}
 
 	ret = wlan_prepare_cmd(pmpriv, HostCmd_CMD_802_11_KEY_MATERIAL,
-			       pioctl_req->action, 0, (t_void *)pioctl_req,
-			       &sec->param.encrypt_key);
+			       (t_u16)pioctl_req->action, 0,
+			       (t_void *)pioctl_req, &sec->param.encrypt_key);
 
 	if (ret == MLAN_STATUS_SUCCESS)
 		ret = MLAN_STATUS_PENDING;
@@ -4847,6 +4900,38 @@ static mlan_status wlan_misc_cloud_keep_alive_rx(pmlan_adapter pmadapter,
 }
 
 /**
+ *  @brief configure auth,assoc timeout parameter
+ *
+ *  @param pmadapter   A pointer to mlan_adapter structure
+ *  @param pioctl_req  A pointer to ioctl request buffer
+ *
+ *  @return        MLAN_STATUS_PENDING --success, otherwise fail
+ */
+static mlan_status wlan_misc_auth_assoc_timeout_cfg(pmlan_adapter pmadapter,
+						    pmlan_ioctl_req pioctl_req)
+{
+	mlan_private *pmpriv = pmadapter->priv[pioctl_req->bss_index];
+	mlan_ds_misc_cfg *pmisc = (mlan_ds_misc_cfg *)pioctl_req->pbuf;
+	mlan_status ret = MLAN_STATUS_SUCCESS;
+	t_u16 cmd_action = 0;
+
+	ENTER();
+
+	if (pioctl_req->action == MLAN_ACT_SET)
+		cmd_action = HostCmd_ACT_GEN_SET;
+	else
+		cmd_action = HostCmd_ACT_GEN_GET;
+	ret = wlan_prepare_cmd(pmpriv, HostCmd_CMD_AUTH_ASSOC_TIMEOUT_CFG,
+			       cmd_action, 0, (t_void *)pioctl_req,
+			       &(pmisc->param.auth_assoc_cfg));
+	if (ret == MLAN_STATUS_SUCCESS)
+		ret = MLAN_STATUS_PENDING;
+
+	LEAVE();
+	return ret;
+}
+
+/**
  *  @brief Miscellaneous configuration handler
  *
  *  @param pmadapter	A pointer to mlan_adapter structure
@@ -5065,6 +5150,9 @@ static mlan_status wlan_misc_cfg_ioctl(pmlan_adapter pmadapter,
 		status =
 			wlan_misc_ioctl_cross_chip_synch(pmadapter, pioctl_req);
 		break;
+	case MLAN_OID_MISC_TSP_CFG:
+		status = wlan_misc_ioctl_tsp_config(pmadapter, pioctl_req);
+		break;
 	case MLAN_OID_MISC_ROAM_OFFLOAD:
 		status = wlan_misc_roam_offload(pmadapter, pioctl_req);
 		break;
@@ -5180,6 +5268,7 @@ static mlan_status wlan_misc_cfg_ioctl(pmlan_adapter pmadapter,
 	case MLAN_OID_MISC_RF_TEST_TX_FRAME:
 	case MLAN_OID_MISC_RF_TEST_HE_POWER:
 	case MLAN_OID_MISC_OTP_MAC_RD_WR:
+	case MLAN_OID_MISC_OTP_CAL_DATA_RD_WR:
 		status = wlan_misc_ioctl_rf_test_cfg(pmadapter, pioctl_req);
 		break;
 	case MLAN_OID_MISC_ARB_CONFIG:
@@ -5206,6 +5295,10 @@ static mlan_status wlan_misc_cfg_ioctl(pmlan_adapter pmadapter,
 		break;
 	case MLAN_OID_MISC_EDMAC_CONFIG:
 		status = wlan_misc_ioctl_edmac_cfg(pmadapter, pioctl_req);
+		break;
+	case MLAN_OID_MISC_AUTH_ASSOC_TIMEOUT_CONFIG:
+		status =
+			wlan_misc_auth_assoc_timeout_cfg(pmadapter, pioctl_req);
 		break;
 	default:
 		if (pioctl_req)

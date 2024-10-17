@@ -238,6 +238,7 @@ typedef struct _chan_stats {
 #define PRIV_CMD_TX_BF_CFG "httxbfcfg"
 #define PRIV_CMD_PORT_CTRL "port_ctrl"
 #define PRIV_CMD_PB_BYPASS "pb_bypass"
+#define PRIV_CMD_FW_WAKEUP_METHOD "fwwakeupmethod"
 #ifdef SDIO
 #define PRIV_CMD_SD_CMD53_RW "sdcmd53rw"
 #endif
@@ -305,6 +306,7 @@ typedef struct _chan_stats {
 #define PRIV_CMD_CH_LOAD "getchload"
 #define PRIV_CMD_CH_LOAD_RESULTS "getloadresults"
 #define PRIV_CMD_CROSS_CHIP_SYNCH "crosssynch"
+#define PRIV_CMD_TSP_CFG "wlan_tsp_cfg"
 
 #define PRIV_CMD_ARB_CFG "arb"
 
@@ -413,6 +415,8 @@ typedef struct _ssu_params_cfg {
 #define PRIV_CMD_BTWT_AP_CONFIG_GET "btwt_AP_config_get"
 
 #define PRIV_CMD_LPM "lpm"
+/** Private command: auth/assoc timeout cfg*/
+#define PRIV_CMD_AUTH_ASSOC_TIMEOUT_CFG "auth_assoc_timeout_cfg"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 int woal_do_ioctl(struct net_device *dev, struct ifreq *req, void __user *data,

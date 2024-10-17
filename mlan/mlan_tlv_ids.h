@@ -3,7 +3,7 @@
  *  @brief This file contains TLV ID definitions.
  *
  *
- *  Copyright 2024 NXP
+ *  Copyright 2023-2024 NXP
  *
  *  This software file (the File) is distributed by NXP
  *  under the terms of the GNU General Public License Version 2, June 1991
@@ -499,5 +499,8 @@
 #define TLV_TYPE_PS_EXT_PARAM (PROPRIETARY_TLV_BASE_ID + 351) /* 0x025f */
 #define TLV_TYPE_MCLIENT_FW_CAPS (PROPRIETARY_TLV_BASE_ID + 352) /* 0x0260 */
 #define NXP_CSI_MONITOR_TLV_ID (PROPRIETARY_TLV_BASE_ID + 354) /* 0x0262 */
+#define TLV_TYPE_BOOT_TIME_CFG (PROPRIETARY_TLV_BASE_ID + 355) /* 0x0263 */
+
+#define VENDOR_IE_OUIS_TLV_ID (PROPRIETARY_TLV_BASE_ID + 357) /* 0x0265 */
 
 #endif /* !MLAN_TLV_IDS_H_ */

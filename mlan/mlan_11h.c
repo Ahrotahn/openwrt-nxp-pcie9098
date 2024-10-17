@@ -3146,6 +3146,7 @@ mlan_status wlan_11h_ioctl_dfs_chan_report(mlan_private *priv,
 	LEAVE();
 	return ret;
 }
+
 /**
  *  @brief Check if channel is under NOP (Non-Occupancy Period)
  *  If so, the channel should not be used until the period expires.

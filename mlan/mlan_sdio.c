@@ -226,7 +226,7 @@ static const struct _mlan_card_info mlan_card_info_sd8897 = {
 #if defined(SD8977) || defined(SD8997) || defined(SD8987) ||                   \
 	defined(SD9098) || defined(SD9097) || defined(SDIW624) ||              \
 	defined(SDAW693) || defined(SD8978) || defined(SD9177) ||              \
-	defined(SDIW615)
+	defined(SDIW610)
 static const struct _mlan_sdio_card_reg mlan_reg_sd8977_sd8997 = {
 	.start_rd_port = 0,
 	.start_wr_port = 0,
@@ -359,8 +359,8 @@ static const struct _mlan_card_info mlan_card_info_sd9177 = {
 };
 #endif
 
-#ifdef SDIW615
-static const struct _mlan_card_info mlan_card_info_sdiw615 = {
+#ifdef SDIW610
+static const struct _mlan_card_info mlan_card_info_sdiw610 = {
 	.max_tx_buf_size = MLAN_TX_DATA_BUF_SIZE_4K,
 	.v16_fw_api = 1,
 	.v17_fw_api = 1,
@@ -1068,11 +1068,11 @@ static mlan_status wlan_sdio_prog_fw_w_helper(pmlan_adapter pmadapter, t_u8 *fw,
 	}
 #endif
 #if defined(SD9097) || defined(SD9177) || defined(SDIW624) ||                  \
-	defined(SDAW693) || defined(SDIW615)
+	defined(SDAW693) || defined(SDIW610)
 	if (IS_SD9097(pmadapter->card_type) ||
 	    IS_SDIW624(pmadapter->card_type) ||
 	    IS_SDAW693(pmadapter->card_type) ||
-	    IS_SDIW615(pmadapter->card_type) || IS_SD9177(pmadapter->card_type))
+	    IS_SDIW610(pmadapter->card_type) || IS_SD9177(pmadapter->card_type))
 		check_fw_status = MTRUE;
 #endif
 
@@ -1280,6 +1280,7 @@ static mlan_status wlan_decode_rx_packet(mlan_adapter *pmadapter,
 {
 	t_u8 *cmd_buf;
 	t_u32 event;
+	t_u32 offset = 0;
 	t_u32 in_ts_sec, in_ts_usec;
 	pmlan_callbacks pcb = &pmadapter->callbacks;
 
@@ -1408,8 +1409,11 @@ static mlan_status wlan_decode_rx_packet(mlan_adapter *pmadapter,
 	case MLAN_TYPE_EVENT:
 		PRINTM(MINFO, "--- Rx: Event ---\n");
 
-		event = *(t_u32 *)&pmbuf->pbuf[pmbuf->data_offset +
-					       SDIO_INTF_HEADER_LEN];
+		if (!wlan_secure_add(&pmbuf->data_offset, SDIO_INTF_HEADER_LEN,
+				     &offset, TYPE_UINT32)) {
+			PRINTM(MERROR, "offset is invalid\n");
+		}
+		event = *(t_u32 *)&pmbuf->pbuf[offset];
 		pmadapter->event_cause = wlan_le32_to_cpu(event);
 		if ((pmadapter->upld_len > MLAN_EVENT_HEADER_LEN) &&
 		    ((pmadapter->upld_len - MLAN_EVENT_HEADER_LEN) <
@@ -1937,6 +1941,7 @@ static mlan_status wlan_host_to_card_mp_aggr(mlan_adapter *pmadapter,
 	t_s32 f_send_cur_buf = 0;
 	t_s32 f_precopy_cur_buf = 0;
 	t_s32 f_postcopy_cur_buf = 0;
+	t_u32 temp = 0;
 	t_u8 aggr_sg = 0;
 	t_u8 mp_aggr_pkt_limit = pmadapter->pcard_sd->mp_aggr_pkt_limit;
 	t_bool new_mode = pmadapter->pcard_sd->supports_sdio_new_mode;
@@ -2055,8 +2060,12 @@ tx_curr_single:
 	if (f_send_cur_buf) {
 		PRINTM(MINFO, "host_2_card_mp_aggr: writing to port #%d\n",
 		       port);
-		ret = wlan_write_data_sync(pmadapter, mbuf,
-					   pmadapter->pcard_sd->ioport + port);
+		if (!wlan_secure_add(&pmadapter->pcard_sd->ioport, port, &temp,
+				     TYPE_UINT32)) {
+			PRINTM(MERROR, "temp is  overflowed\n");
+			return MLAN_STATUS_FAILURE;
+		}
+		ret = wlan_write_data_sync(pmadapter, mbuf, temp);
 		if (!(pmadapter->pcard_sd->mp_wr_bitmap &
 		      (1 << pmadapter->pcard_sd->curr_wr_port)))
 			pmadapter->pcard_sd->mpa_sent_no_ports++;
@@ -2463,10 +2472,10 @@ mlan_status wlan_get_sdio_device(pmlan_adapter pmadapter)
 		pmadapter->pcard_info = &mlan_card_info_sdaw693;
 		break;
 #endif
-#ifdef SDIW615
-	case CARD_TYPE_SDIW615:
+#ifdef SDIW610
+	case CARD_TYPE_SDIW610:
 		pmadapter->pcard_sd->reg = &mlan_reg_sd8977_sd8997;
-		pmadapter->pcard_info = &mlan_card_info_sdiw615;
+		pmadapter->pcard_info = &mlan_card_info_sdiw610;
 		break;
 #endif
 #ifdef SD9177
@@ -3086,7 +3095,7 @@ exit:
 
 #if defined(SD9098) || defined(SD9097) || defined(SDIW624) ||                  \
 	defined(SDAW693) || defined(SD9177) || defined(SD8997) ||              \
-	defined(SD8987) || defined(SD8978) || defined(SDIW615)
+	defined(SD8987) || defined(SD8978) || defined(SDIW610)
 /**
  *  @brief This function sends vdll data to the card.
  *
@@ -3149,7 +3158,7 @@ static mlan_status wlan_sdio_host_to_card_ext(pmlan_private pmpriv, t_u8 type,
 
 #if defined(SD9098) || defined(SD9097) || defined(SDIW624) ||                  \
 	defined(SDAW693) || defined(SD9177) || defined(SD8997) ||              \
-	defined(SD8987) || defined(SD8978) || defined(SDIW615)
+	defined(SD8987) || defined(SD8978) || defined(SDIW610)
 	if (type == MLAN_TYPE_VDLL)
 		return wlan_sdio_send_vdll(pmadapter, pmbuf);
 #endif
@@ -3479,8 +3488,12 @@ static mlan_status wlan_pm_sdio_wakeup_card(pmlan_adapter pmadapter,
 		pmadapter->wakeup_fw_timer_is_set = MTRUE;
 	}
 
-	ret = pcb->moal_write_reg(pmadapter->pmoal_handle,
-				  HOST_TO_CARD_EVENT_REG, HOST_POWER_UP);
+	if (pmadapter->fw_wakeup_method == WAKEUP_FW_THRU_GPIO) {
+		/* GPIO_PORT_TO_LOW(); */
+	} else
+		ret = pcb->moal_write_reg(pmadapter->pmoal_handle,
+					  HOST_TO_CARD_EVENT_REG,
+					  HOST_POWER_UP);
 
 	LEAVE();
 	return ret;
@@ -3500,8 +3513,11 @@ static mlan_status wlan_pm_sdio_reset_card(pmlan_adapter pmadapter)
 
 	ENTER();
 
-	ret = pcb->moal_write_reg(pmadapter->pmoal_handle,
-				  HOST_TO_CARD_EVENT_REG, 0);
+	if (pmadapter->fw_wakeup_method == WAKEUP_FW_THRU_GPIO) {
+		/* GPIO_PORT_TO_HIGH(); */
+	} else
+		ret = pcb->moal_write_reg(pmadapter->pmoal_handle,
+					  HOST_TO_CARD_EVENT_REG, 0);
 
 	LEAVE();
 	return ret;
@@ -3633,7 +3649,7 @@ mlan_status wlan_reset_fw(pmlan_adapter pmadapter)
 #if defined(SD8997) || defined(SD8977) || defined(SD8987) ||                   \
 	defined(SD9098) || defined(SD9097) || defined(SDIW624) ||              \
 	defined(SDAW693) || defined(SD8978) || defined(SD9177) ||              \
-	defined(SDIW615)
+	defined(SDIW610)
 	if (MFALSE
 #ifdef SD8997
 	    || IS_SD8997(pmadapter->card_type)
@@ -3659,8 +3675,8 @@ mlan_status wlan_reset_fw(pmlan_adapter pmadapter)
 #ifdef SDAW693
 	    || IS_SDAW693(pmadapter->card_type)
 #endif
-#ifdef SDIW615
-	    || IS_SDIW615(pmadapter->card_type)
+#ifdef SDIW610
+	    || IS_SDIW610(pmadapter->card_type)
 #endif
 #ifdef SD9177
 	    || IS_SD9177(pmadapter->card_type)

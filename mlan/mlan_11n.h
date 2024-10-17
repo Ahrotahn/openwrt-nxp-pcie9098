@@ -297,7 +297,7 @@ static INLINE t_u8 wlan_is_amsdu_allowed(mlan_private *priv, raListTbl *ptr,
 #ifdef UAP_SUPPORT
 	sta_node *sta_ptr = MNULL;
 #endif
-	if (priv->amsdu_disable)
+	if (priv->amsdu_disable || !ptr->max_amsdu)
 		return MFALSE;
 #ifdef UAP_SUPPORT
 	if (GET_BSS_ROLE(priv) == MLAN_BSS_ROLE_UAP) {
@@ -324,6 +324,23 @@ static INLINE t_u8 wlan_is_amsdu_allowed(mlan_private *priv, raListTbl *ptr,
 }
 
 /**
+ *  @brief This function gets max number of BA stream supported
+ *
+ *  @param pmadapter  A pointer to mlan_adapter
+ *
+ *  @return           number of BA streams
+ */
+static INLINE t_u32 wlan_get_bastream_limit(mlan_adapter *pmadapter)
+{
+	t_u32 bastreams = ISSUPP_GETTXBASTREAM(pmadapter->hw_dot_11n_dev_cap);
+
+	if (pmadapter->mclient_tx_supported)
+		return pmadapter->tx_ba_stream_limit;
+
+	return bastreams;
+}
+
+/**
  *  @brief This function checks whether a BA stream is available or not
  *
  *  @param priv     A pointer to mlan_private
@@ -342,7 +359,7 @@ static INLINE t_u8 wlan_is_bastream_avail(mlan_private *priv)
 			bastream_num += wlan_wmm_list_len(
 				(pmlan_list_head)&pmpriv->tx_ba_stream_tbl_ptr);
 	}
-	bastream_max = ISSUPP_GETTXBASTREAM(priv->adapter->hw_dot_11n_dev_cap);
+	bastream_max = wlan_get_bastream_limit(priv->adapter);
 	if (bastream_max == 0)
 		bastream_max = MLAN_MAX_TX_BASTREAM_DEFAULT;
 	return (bastream_num < bastream_max) ? MTRUE : MFALSE;

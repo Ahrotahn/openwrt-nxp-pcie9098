@@ -164,6 +164,7 @@ enum _mlan_ioctl_req_id {
 	MLAN_OID_PM_CFG_DEEP_SLEEP = 0x00090004,
 	MLAN_OID_PM_CFG_SLEEP_PD = 0x00090005,
 	MLAN_OID_PM_CFG_PS_CFG = 0x00090006,
+	MLAN_OID_PM_CFG_FW_WAKEUP_METHOD = 0x00090007,
 	MLAN_OID_PM_CFG_SLEEP_PARAMS = 0x00090008,
 #ifdef UAP_SUPPORT
 	MLAN_OID_PM_CFG_PS_MODE = 0x00090009,
@@ -375,6 +376,7 @@ enum _mlan_ioctl_req_id {
 	MLAN_OID_MISC_CROSS_CHIP_SYNCH = 0x0020008B,
 	MLAN_OID_MISC_RF_TEST_CONFIG_TRIGGER_FRAME = 0x0020008C,
 	MLAN_OID_MISC_OFDM_DESENSE_CFG = 0x0020008D,
+	MLAN_OID_MISC_TSP_CFG = 0x002008C,
 	MLAN_OID_MISC_REORDER_FLUSH_TIME = 0x0020008F,
 	MLAN_OID_MISC_NAV_MITIGATION = 0x00200090,
 	MLAN_OID_MISC_LED_CONFIG = 0x00200091,
@@ -383,6 +385,8 @@ enum _mlan_ioctl_req_id {
 	MLAN_OID_MISC_GPIO_CFG = 0x00200094,
 	MLAN_OID_MISC_REGION_POWER_CFG = 0x00200095,
 	MLAN_OID_MISC_OTP_MAC_RD_WR = 0x00200097,
+	MLAN_OID_MISC_OTP_CAL_DATA_RD_WR = 0x00200098,
+	MLAN_OID_MISC_AUTH_ASSOC_TIMEOUT_CONFIG = 0x00200099,
 };
 
 /** Sub command size */
@@ -519,7 +523,7 @@ typedef struct {
 	 * Buffer marker for multiple wlan_ioctl_get_scan_table_entry
 	 * structures. Each struct is padded to the nearest 32 bit boundary.
 	 */
-	t_u8 scan_table_entry_buf[1];
+	t_u8 scan_table_entry_buf[];
 } wlan_ioctl_get_scan_table_info;
 
 /**
@@ -576,7 +580,7 @@ typedef struct _mlan_user_scan {
 	/** Length of scan_cfg_buf */
 	t_u32 scan_cfg_len;
 	/** Buffer of scan config */
-	t_u8 scan_cfg_buf[1];
+	t_u8 scan_cfg_buf[];
 } mlan_user_scan, *pmlan_user_scan;
 
 /** Type definition of mlan_scan_req */
@@ -1763,6 +1767,8 @@ typedef struct _mlan_ds_get_stats {
 	t_u32 gdma_abort_cnt;
 	/** Rx Reset MAC Count */
 	t_u32 g_reset_rx_mac_cnt;
+	/** SDMA FSM stuck Count*/
+	t_u32 SdmaStuckCnt;
 	// Ownership error counters
 	/*Error Ownership error count*/
 	t_u32 dwCtlErrCnt;
@@ -3395,6 +3401,15 @@ typedef struct _mlan_ds_hs_wakeup_reason {
 	t_u16 hs_wakeup_reason;
 } mlan_ds_hs_wakeup_reason;
 
+/** Type definition of mlan_fw_wakeup_params for
+ * MLAN_OID_PM_CFG_FW_WAKEUP_METHOD */
+typedef struct _mlan_fw_wakeup_params {
+	/** FW wakeup method */
+	t_u16 method;
+	/** GPIO pin NO.*/
+	t_u8 gpio_pin;
+} mlan_fw_wakeup_params, *pmlan_fw_wakeup_params;
+
 /** Type definition of mlan_ds_ps_cfg for MLAN_OID_PM_CFG_PS_CFG */
 typedef struct _mlan_ds_bcn_timeout {
 	/** Beacon miss timeout period window */
@@ -3425,6 +3440,8 @@ typedef struct _mlan_ds_pm_cfg {
 		t_u32 sleep_period;
 		/** PS configuration parameters for MLAN_OID_PM_CFG_PS_CFG */
 		mlan_ds_ps_cfg ps_cfg;
+		/** FW wakeup method for MLAN_OID_PM_CFG_FW_WAKEUP_METHOD */
+		mlan_fw_wakeup_params fw_wakeup_params;
 		/** PS configuration parameters for MLAN_OID_PM_CFG_SLEEP_PARAMS
 		 */
 		mlan_ds_sleep_params sleep_params;
@@ -4177,6 +4194,9 @@ typedef struct _mlan_ds_11ax_rutxpwr_cmd {
 	/** column,row are 3 for every subband table,however column are 7 for FC
 	 * and 6 for other SOCs */
 	t_u8 col;
+	/** row are 3 for every subband table,total row for MAC1 is 12 and MAC2
+	 * id 3 ( consider only 2G support */
+	t_u8 row;
 	/**ru tx data */
 	t_s8 rutxSubPwr[89];
 } mlan_ds_11ax_rutxpwr_cmd, *pmlan_ds_11ax_rutxpwr_cmd;
@@ -4264,6 +4284,8 @@ typedef struct MLAN_PACK_START _mlan_ds_twt_setup {
 	t_u16 twt_mantissa;
 	/** TWT Request Type, 0: REQUEST_TWT, 1: SUGGEST_TWT*/
 	t_u8 twt_request;
+	/** TWT link lost timeout threshold */
+	t_u16 bcnMiss_threshold;
 } MLAN_PACK_END mlan_ds_twt_setup, *pmlan_ds_twt_setup;
 
 /** Type definition of mlan_ds_twt_teardown for MLAN_OID_11AX_TWT_CFG */
@@ -4415,14 +4437,14 @@ enum _mlan_reg_type {
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
 	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
 	defined(USBIW624) || defined(SD9097) || defined(SD9177) ||             \
-	defined(SDIW615) || defined(USBIW615)
+	defined(SDIW610) || defined(USBIW610)
 	MLAN_REG_CIU = 8,
 #endif
 #if defined(PCIE9098) || defined(SD9098) || defined(USB9098) ||                \
 	defined(PCIE9097) || defined(USB9097) || defined(SDIW624) ||           \
 	defined(SDAW693) || defined(PCIEAW693) || defined(PCIEIW624) ||        \
-	defined(USBIW624) || defined(SD9097) || defined(SDIW615) ||            \
-	defined(USBIW615)
+	defined(USBIW624) || defined(SD9097) || defined(SDIW610) ||            \
+	defined(USBIW610)
 	MLAN_REG_MAC2 = 0x81,
 	MLAN_REG_BBP2 = 0x82,
 	MLAN_REG_RF2 = 0x83,
@@ -5659,7 +5681,7 @@ typedef MLAN_PACK_START struct _mlan_ds_misc_tx_rx_histogram {
 	/** Size of Tx/Rx info */
 	t_u16 size;
 	/** Store Tx/Rx info */
-	t_u8 value[1];
+	t_u8 value[];
 } MLAN_PACK_END mlan_ds_misc_tx_rx_histogram;
 
 #define RX_PKT_INFO MBIT(1)
@@ -5917,6 +5939,7 @@ typedef struct _mlan_ds_misc_chan_trpc_cfg {
 #define MFG_CMD_CONFIG_MAC_HE_TB_TX 0x110A
 #define MFG_CMD_CONFIG_TRIGGER_FRAME 0x110C
 #define MFG_CMD_OTP_MAC_ADD 0x108C
+#define MFG_CMD_OTP_CAL_DATA 0x121A
 
 /** MFG CMD generic cfg */
 struct MLAN_PACK_START mfg_cmd_generic_cfg {
@@ -6227,6 +6250,24 @@ typedef MLAN_PACK_START struct _mfg_cmd_otp_mac_addr_rd_wr_t {
 	t_u8 mac_addr[MLAN_MAC_ADDR_LENGTH];
 } MLAN_PACK_END mfg_cmd_otp_mac_addr_rd_wr_t;
 
+#define CAL_DATA_LEN 1400
+typedef MLAN_PACK_START struct _mfg_cmd_otp_cal_data_rd_wr_t {
+	/** MFG command code */
+	t_u32 mfg_cmd;
+	/** Action */
+	t_u16 action;
+	/** Device ID */
+	t_u16 device_id;
+	/** MFG Error code */
+	t_u32 error;
+	/** CAL Data write status */
+	t_u32 cal_data_status;
+	/** CAL Data Length*/
+	t_u32 cal_data_len;
+	/** Destination MAC Address */
+	t_u8 cal_data[CAL_DATA_LEN];
+} MLAN_PACK_END mfg_cmd_otp_cal_data_rd_wr_t;
+
 typedef struct _mlan_ds_misc_chnrgpwr_cfg {
 	/** length */
 	t_u16 length;
@@ -6243,6 +6284,22 @@ typedef struct _mlan_ds_misc_cfp_tbl {
 	/** cfp table */
 	chan_freq_power_t cfp_tbl[];
 } mlan_ds_misc_cfp_tbl;
+
+/** channel attribute */
+typedef struct _chan_attr {
+	/** channel number */
+	t_u8 channel;
+	/** channel flags */
+	t_u8 flags;
+} chan_attr_t;
+
+/** channel flags table */
+typedef struct _mlan_ds_chan_attr {
+	/** Data length */
+	t_u16 data_len;
+	/** Data */
+	chan_attr_t chan_attr[MLAN_MAX_CHANNEL_NUM];
+} MLAN_PACK_END mlan_ds_chan_attr;
 
 /** mlan_ds_mc_aggr_cfg for MLAN_OID_MISC_MC_AGGR_CFG */
 typedef struct _mlan_ds_mc_aggr_cfg {
@@ -6301,6 +6358,33 @@ typedef struct _mlan_ds_cross_chip_synch {
 	t_u32 init_tsf_high;
 } mlan_ds_cross_chip_synch;
 
+#define MAX_RFUS 2
+#define MAX_PATHS 2
+typedef struct _mlan_ds_tsp_cfg {
+	/** TSP config action 0-GET, 1-SET */
+	t_u16 action;
+	/** TSP enable/disable tsp algothrim */
+	t_u16 enable;
+	/** TSP config power backoff */
+	t_s32 backoff;
+	/** TSP config high threshold */
+	t_s32 high_thrshld;
+	/** TSP config low threshold */
+	t_s32 low_thrshld;
+	/** TSP config DUTY_CYC_STEP */
+	t_s32 duty_cyc_step;
+	/** TSP config DUTY_CYC_MIN */
+	t_s32 duty_cyc_min;
+	/** TSP config HIGH_THRESHOLD_TEMP */
+	t_s32 high_thrshld_temp;
+	/** TSP config LOW_THRESHOLD_TEMP */
+	t_s32 low_thrshld_temp;
+	/** TSP CAU TSEN register */
+	t_s32 reg_cau_val;
+	/** TSP RFU registers */
+	t_s32 reg_rfu_temp[MAX_RFUS][MAX_PATHS];
+} MLAN_PACK_END mlan_ds_tsp_cfg;
+
 typedef struct _mlan_ds_reorder_flush_time {
 	/** AC BK/BE_flush time*/
 	t_u16 flush_time_ac_be_bk;
@@ -6321,6 +6405,36 @@ typedef struct _mlan_ds_ed_mac_cfg {
 
 	t_u32 ed_bitmap_txq_lock;
 } mlan_ds_ed_mac_cfg;
+
+/** valid range for mlan_ds_auth_assoc_timeout_cfg */
+#define AUTH_TIMEOUT_MIN 500
+#define AUTH_TIMEOUT_MAX 2400
+#define AUTH_RETRY_TIMEOUT_ACK_MIN 50
+#define AUTH_RETRY_TIMEOUT_ACK_MAX 300
+#define AUTH_RETRY_TIMEOUT_NO_ACK_MIN 40
+#define AUTH_RETRY_TIMEOUT_NO_ACK_MAX 80
+#define ASSOC_TIMEOUT_MIN 200
+#define ASSOC_TIMEOUT_MAX 1500
+#define REASSOC_TIMEOUT_MIN 100
+#define REASSOC_TIMEOUT_MAX 1500
+#define ASSOC_RETRY_TIMEOUT_MIN 50
+#define ASSOC_RETRY_TIMEOUT_MAX 150
+
+/** Auth Assoc timeout configuration parameters */
+typedef struct _mlan_ds_auth_assoc_timeout_cfg {
+	/** auth timeout */
+	t_u16 auth_timeout;
+	/** Auth retry timeout if received ack */
+	t_u16 auth_retry_timeout_if_ack;
+	/** Auth retry timeout if ack is not received */
+	t_u16 auth_retry_timeout_if_no_ack;
+	/** assoc timeout */
+	t_u16 assoc_timeout;
+	/** reassoc timeout */
+	t_u16 reassoc_timeout;
+	/** assoc/reassoc frame retry timeout if ack received */
+	t_u16 retry_timeout;
+} mlan_ds_auth_assoc_timeout_cfg;
 
 /** Type definition of mlan_ds_misc_cfg for MLAN_IOCTL_MISC_CFG */
 typedef struct _mlan_ds_misc_cfg {
@@ -6469,6 +6583,7 @@ typedef struct _mlan_ds_misc_cfg {
 		mlan_ds_misc_cck_desense_cfg cck_desense_cfg;
 		mlan_ds_misc_chan_trpc_cfg trpc_cfg;
 		mlan_ds_misc_chnrgpwr_cfg rgchnpwr_cfg;
+		mlan_ds_chan_attr chan_attr_cfg;
 
 		mlan_ds_band_steer_cfg band_steer_cfg;
 		mlan_ds_beacon_stuck_param_cfg beacon_stuck_cfg;
@@ -6478,6 +6593,7 @@ typedef struct _mlan_ds_misc_cfg {
 		struct mfg_Cmd_HE_TBTx_t mfg_he_power;
 		mfg_Cmd_IEEEtypes_CtlBasicTrigHdr_t mfg_tx_trigger_config;
 		mfg_cmd_otp_mac_addr_rd_wr_t mfg_otp_mac_addr_rd_wr;
+		mfg_cmd_otp_cal_data_rd_wr_t mfg_otp_cal_data_rd_wr;
 		mlan_ds_misc_arb_cfg arb_cfg;
 		mlan_ds_misc_cfp_tbl cfp;
 		t_u8 range_ext_mode;
@@ -6493,11 +6609,31 @@ typedef struct _mlan_ds_misc_cfg {
 		t_u32 ips_ctrl;
 		mlan_ds_ch_load ch_load;
 		mlan_ds_cross_chip_synch cross_chip_synch;
+		mlan_ds_tsp_cfg tsp_cfg;
 		mlan_ds_reorder_flush_time flush_time;
 		mlan_ds_ed_mac_cfg edmac_cfg;
 		mlan_ds_gpio_cfg_ops gpio_cfg_ops;
+		mlan_ds_auth_assoc_timeout_cfg auth_assoc_cfg;
 	} param;
 } mlan_ds_misc_cfg, *pmlan_ds_misc_cfg;
+
+typedef struct _mlan_cfpinfo {
+	t_u8 nss : 2;
+	t_u8 is2g_present : 1;
+	t_u8 is5g_present : 1;
+	t_u8 is6g_present : 1;
+	t_u8 reserved : 3;
+	t_u8 rows_2g;
+	t_u8 cols_2g;
+	t_u8 rows_5g;
+	t_u8 cols_5g;
+	t_u8 rows_6g;
+	t_u8 cols_6g;
+	t_u8 region_code;
+	t_u8 environment;
+	t_u8 country_code[2];
+	t_u16 action;
+} mlan_cfpinfo;
 
 /** Hotspot status enable */
 #define HOTSPOT_ENABLED MBIT(0)

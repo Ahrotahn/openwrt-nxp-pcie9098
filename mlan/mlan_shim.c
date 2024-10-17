@@ -317,6 +317,8 @@ mlan_status mlan_register(pmlan_device pmdevice, t_void **ppmlan_adapter)
 	MASSERT(pcb->moal_hist_data_add);
 	MASSERT(pcb->moal_updata_peer_signal);
 	MASSERT(pcb->moal_do_div);
+
+	MASSERT(pcb->moal_get_host_time_ns);
 	/* Save pmoal_handle */
 	pmadapter->pmoal_handle = pmdevice->pmoal_handle;
 
@@ -326,10 +328,12 @@ mlan_status mlan_register(pmlan_device pmdevice, t_void **ppmlan_adapter)
 	pmadapter->card_rev = pmdevice->card_rev;
 	pmadapter->init_para.uap_max_sta = pmdevice->uap_max_sta;
 	pmadapter->init_para.wacp_mode = pmdevice->wacp_mode;
+	pmadapter->init_para.fw_data_cfg = pmdevice->fw_data_cfg;
 	pmadapter->init_para.mcs32 = pmdevice->mcs32;
 	pmadapter->init_para.antcfg = pmdevice->antcfg;
 	pmadapter->init_para.reject_addba_req = pmdevice->reject_addba_req;
 	pmadapter->init_para.dmcs = pmdevice->dmcs;
+	pmadapter->init_para.pref_dbc = pmdevice->pref_dbc;
 
 #ifdef SDIO
 	if (IS_SD(pmadapter->card_type)) {
@@ -346,10 +350,8 @@ mlan_status mlan_register(pmlan_device pmdevice, t_void **ppmlan_adapter)
 		}
 		if ((pmdevice->int_mode == INT_MODE_GPIO) &&
 		    (pmdevice->gpio_pin == 0)) {
-			PRINTM(MERROR,
-			       "SDIO_GPIO_INT_CONFIG: Invalid GPIO Pin\n");
-			ret = MLAN_STATUS_FAILURE;
-			goto error;
+			PRINTM(MINFO,
+			       "SDIO_GPIO_INT_CONFIG: FW will duplicate SDIO Intr on GPIO-21\n");
 		}
 		pmadapter->init_para.int_mode = pmdevice->int_mode;
 		pmadapter->init_para.gpio_pin = pmdevice->gpio_pin;
@@ -382,6 +384,10 @@ mlan_status mlan_register(pmlan_device pmdevice, t_void **ppmlan_adapter)
 			   sizeof(mlan_adapter_operations),
 			   sizeof(mlan_adapter_operations));
 		pmadapter->init_para.ring_size = pmdevice->ring_size;
+		pmadapter->init_para.max_tx_pending = pmdevice->max_tx_pending;
+		pmadapter->init_para.tx_budget = pmdevice->tx_budget;
+		pmadapter->init_para.mclient_scheduling =
+			pmdevice->mclient_scheduling;
 		ret = wlan_get_pcie_device(pmadapter);
 		if (MLAN_STATUS_SUCCESS != ret) {
 			ret = MLAN_STATUS_FAILURE;
@@ -417,6 +423,7 @@ mlan_status mlan_register(pmlan_device pmdevice, t_void **ppmlan_adapter)
 #endif
 	pmadapter->init_para.auto_ds = pmdevice->auto_ds;
 	pmadapter->init_para.ext_scan = pmdevice->ext_scan;
+	pmadapter->init_para.bootup_cal_ctrl = pmdevice->bootup_cal_ctrl;
 	pmadapter->init_para.ps_mode = pmdevice->ps_mode;
 	if (pmdevice->max_tx_buf == MLAN_TX_DATA_BUF_SIZE_2K ||
 	    pmdevice->max_tx_buf == MLAN_TX_DATA_BUF_SIZE_4K ||
@@ -1318,10 +1325,24 @@ process_start:
 		}
 
 		/* Check for event */
+#ifdef USB
+		if (IS_USB(pmadapter->card_type))
+			wlan_request_event_lock(pmadapter);
+#endif
 		if (pmadapter->event_received) {
 			pmadapter->event_received = MFALSE;
+#ifdef USB
+			if (IS_USB(pmadapter->card_type))
+				wlan_release_event_lock(pmadapter);
+#endif
 			wlan_process_event(pmadapter);
 		}
+#ifdef USB
+		else {
+			if (IS_USB(pmadapter->card_type))
+				wlan_release_event_lock(pmadapter);
+		}
+#endif
 		/* Check if we need to confirm Sleep Request received previously
 		 */
 		if (pmadapter->ps_state == PS_STATE_PRE_SLEEP)
@@ -1447,35 +1468,42 @@ exit_main_proc:
 static void mlan_check_llde_pkt_filter(mlan_adapter *pmadapter,
 				       pmlan_buffer pmbuf, t_u8 ip_protocol)
 {
-	mlan_private *pmpriv = pmadapter->priv[pmbuf->bss_index];
 	t_u8 matched_filter = 0;
+	t_u8 i = 0;
 
 	if (!(pmadapter->llde_enabled &&
 	      (pmadapter->llde_mode == MLAN_11AXCMD_LLDE_MODE_EVENT_DRIVEN))) {
 		return;
 	}
 	/* match iphone mac addr */
-	if (pmadapter->llde_device_filter == 1) {
-		sta_node *sta_ptr = MNULL;
-		// get station entry from Peer MAC address
-		sta_ptr = wlan_get_station_entry(
-			pmpriv, (pmbuf->pbuf + pmbuf->data_offset));
-		if (sta_ptr && sta_ptr->is_apple_sta) {
-			matched_filter = 1;
+	if (pmadapter->llde_device_filter) {
+		for (i = 0; i < pmadapter->llde_totalIPhones; i++) {
+			if (memcmp(pmadapter,
+				   &pmadapter->llde_iphonefilters
+					    [i * MLAN_MAC_ADDR_LENGTH],
+				   (pmbuf->pbuf + pmbuf->data_offset),
+				   MLAN_MAC_ADDR_LENGTH) == 0) {
+				matched_filter = 1;
+				break;
+			}
 		}
 	}
 	if (matched_filter == 0) {
 		/* check mac filter if iphone device filter not matched */
-		if ((memcmp(pmadapter, pmadapter->llde_macfilter1,
-			    (pmbuf->pbuf + pmbuf->data_offset),
-			    MLAN_MAC_ADDR_LENGTH) == 0) ||
-		    (memcmp(pmadapter, pmadapter->llde_macfilter2,
-			    (pmbuf->pbuf + pmbuf->data_offset),
-			    MLAN_MAC_ADDR_LENGTH) == 0)) {
-			matched_filter = 1;
+		for (i = 0; i < pmadapter->llde_totalMacFilters; i++) {
+			if (memcmp(pmadapter,
+				   &pmadapter->llde_macfilters
+					    [i * MLAN_MAC_ADDR_LENGTH],
+				   (pmbuf->pbuf + pmbuf->data_offset),
+				   MLAN_MAC_ADDR_LENGTH) == 0) {
+				matched_filter = 1;
+				break;
+			}
 		}
 	}
 
+	/* device address is matched, check packet type to mark it as special
+	 * llde packet */
 	if (matched_filter) {
 		if ((pmadapter->llde_packet_type == LLDE_FILTER_PKT_ALL) ||
 		    ((pmadapter->llde_packet_type == LLDE_FILTER_PKT_UDP) &&
@@ -1811,11 +1839,13 @@ mlan_status mlan_recv(t_void *padapter, pmlan_buffer pmbuf, t_u32 port)
 			if ((len > 0) && (len < MAX_EVENT_SIZE))
 				memmove(pmadapter, pmadapter->event_body, pbuf,
 					len);
+			wlan_request_event_lock(pmadapter);
 			/* remove 4 byte recv_type */
 			pmbuf->data_offset += MLAN_TYPE_LEN;
 			pmbuf->data_len -= MLAN_TYPE_LEN;
 			pmadapter->event_received = MTRUE;
 			pmadapter->pmlan_buffer_event = pmbuf;
+			wlan_release_event_lock(pmadapter);
 			/* MOAL to call mlan_main_process for processing */
 			break;
 		default:

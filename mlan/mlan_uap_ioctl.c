@@ -337,7 +337,10 @@ static mlan_status wlan_uap_bss_ioctl_reset(pmlan_adapter pmadapter,
 	 */
 	for (i = 0; i < pmadapter->max_mgmt_ie_index; i++)
 		memset(pmadapter, &pmpriv->mgmt_ie[i], 0, sizeof(custom_ie));
-	pmpriv->add_ba_param.timeout = MLAN_DEFAULT_BLOCK_ACK_TIMEOUT;
+
+	pmpriv->add_ba_param.timeout = pmadapter->tx_ba_timeout_support ?
+					       MLAN_DEFAULT_BLOCK_ACK_TIMEOUT :
+					       0;
 	pmpriv->add_ba_param.tx_win_size = MLAN_UAP_AMPDU_DEF_TXWINSIZE;
 	pmpriv->add_ba_param.rx_win_size = MLAN_UAP_AMPDU_DEF_RXWINSIZE;
 	pmpriv->user_rxwinsize = pmpriv->add_ba_param.rx_win_size;
@@ -2247,6 +2250,10 @@ mlan_status wlan_ops_uap_ioctl(t_void *adapter, pmlan_ioctl_req pioctl_req)
 			status = wlan_misc_ioctl_cross_chip_synch(pmadapter,
 								  pioctl_req);
 		}
+		if (misc->sub_command == MLAN_OID_MISC_TSP_CFG) {
+			status = wlan_misc_ioctl_tsp_config(pmadapter,
+							    pioctl_req);
+		}
 		if (misc->sub_command == MLAN_OID_MISC_GET_CHAN_REGION_CFG)
 			status = wlan_misc_chan_reg_cfg(pmadapter, pioctl_req);
 		if (misc->sub_command == MLAN_OID_MISC_OPER_CLASS_CHECK)
@@ -2375,6 +2382,8 @@ mlan_status wlan_ops_uap_ioctl(t_void *adapter, pmlan_ioctl_req pioctl_req)
 			status = wlan_config_mgmt_filter(pmadapter, pioctl_req);
 		if (pm->sub_command == MLAN_OID_PM_INFO)
 			status = wlan_get_pm_info(pmadapter, pioctl_req);
+		if (pm->sub_command == MLAN_OID_PM_CFG_FW_WAKEUP_METHOD)
+			status = wlan_fw_wakeup_method(pmadapter, pioctl_req);
 		break;
 	case MLAN_IOCTL_SNMP_MIB:
 		snmp = (mlan_ds_snmp_mib *)pioctl_req->pbuf;

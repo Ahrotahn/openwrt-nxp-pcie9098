@@ -110,6 +110,8 @@ void woal_host_mlme_disconnect(pmoal_private priv, u16 reason_code, u8 *sa);
 void woal_host_mlme_work_queue(struct work_struct *work);
 void woal_host_mlme_process_assoc_resp(moal_private *priv,
 				       mlan_ds_assoc_info *assoc_info);
+void woal_host_mlme_process_assoc_timeout(moal_private *priv,
+					  struct cfg80211_bss *bss);
 #endif
 #endif
 

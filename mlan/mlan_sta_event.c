@@ -611,15 +611,9 @@ static void wlan_process_sta_tx_pause_event(pmlan_private priv,
 		}
 		if (tlv_type == TLV_TYPE_TX_PAUSE) {
 			tx_pause_tlv = (MrvlIEtypes_tx_pause_t *)tlv;
-			PRINTM(MCMND,
-			       "TxPause: " MACSTR
-			       " pause=%d, pkts=%d, priv->tx_pause=%d\n",
+			PRINTM(MCMND, "TxPause: " MACSTR " pause=%d, pkts=%d\n",
 			       MAC2STR(tx_pause_tlv->peermac),
-			       tx_pause_tlv->tx_pause, tx_pause_tlv->pkt_cnt,
-			       priv->tx_pause);
-			if (bssid)
-				PRINTM(MCMND, "TxPause: " MACSTR "\n",
-				       MAC2STR(bssid));
+			       tx_pause_tlv->tx_pause, tx_pause_tlv->pkt_cnt);
 			status = wlan_get_tdls_link_status(
 				priv, tx_pause_tlv->peermac);
 			if (status != TDLS_NOT_SETUP) {
@@ -969,6 +963,13 @@ mlan_status wlan_ops_sta_process_event(t_void *priv)
 		PRINTM(MEVENT, "EVENT: FW Debug Info %s\n",
 		       (t_u8 *)pevent->event_buf);
 		wlan_recv_event(pmpriv, pevent->event_id, pevent);
+		break;
+
+	case EVENT_CHAN_SWITCH_TO_6G_BLOCK:
+		reason_code = wlan_le16_to_cpu(*(t_u16 *)(pmbuf->pbuf +
+							  pmbuf->data_offset +
+							  sizeof(eventcause)));
+		print_chan_switch_block_event(reason_code);
 		break;
 
 	case EVENT_BG_SCAN_REPORT:

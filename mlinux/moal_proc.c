@@ -236,7 +236,7 @@ static int woal_info_proc_read(struct seq_file *sfp, void *data)
 	for (i = 0; i < (int)netdev->num_tx_queues; i++) {
 		seq_printf(sfp, "tx queue %d:  %s\n", i,
 			   ((netif_tx_queue_stopped(
-				    netdev_get_tx_queue(netdev, 0))) ?
+				    netdev_get_tx_queue(netdev, i))) ?
 				    "stopped" :
 				    "started"));
 	}
@@ -558,7 +558,16 @@ static mlan_status woal_priv_set_tx_rx_ant(moal_handle *handle, char *line)
 
 	if (handle->feature_control & FEATURE_CTRL_STREAM_2X2) {
 		radio->param.ant_cfg.tx_antenna = data[0];
-		radio->param.ant_cfg.rx_antenna = data[0];
+		if (data[0] == RF_ANTENNA_AUTO) {
+			radio->param.ant_cfg.rx_antenna = 0;
+			if (data[1] > 0xffff) {
+				kfree(req);
+				LEAVE();
+				return MLAN_STATUS_FAILURE;
+			}
+		} else {
+			radio->param.ant_cfg.rx_antenna = data[0];
+		}
 		if (user_data_len == 2)
 			radio->param.ant_cfg.rx_antenna = data[1];
 #if defined(STA_CFG80211) || defined(UAP_CFG80211)
@@ -601,9 +610,11 @@ static mlan_status woal_priv_set_tx_rx_ant(moal_handle *handle, char *line)
 static ssize_t woal_config_write(struct file *f, const char __user *buf,
 				 size_t count, loff_t *off)
 {
-	char databuf[200];
+	char *databuf = NULL;
 	char *line = NULL;
 	int ret = 0;
+	gfp_t flag;
+
 	t_u32 config_data = 0;
 	struct seq_file *sfp = f->private_data;
 	moal_handle *handle = (moal_handle *)sfp->private;
@@ -622,15 +633,17 @@ static ssize_t woal_config_write(struct file *f, const char __user *buf,
 		return 0;
 	}
 
-	if (count >= sizeof(databuf)) {
-		MODULE_PUT;
+	flag = (in_atomic() || irqs_disabled()) ? GFP_ATOMIC : GFP_KERNEL;
+	databuf = kzalloc(count, flag);
+	if (databuf == NULL) {
 		LEAVE();
-		return (int)count;
+		return -ENOMEM;
 	}
-	memset(databuf, 0, sizeof(databuf));
-	copy_len = MIN((sizeof(databuf) - 1), count);
-	if (copy_from_user(databuf, buf, copy_len)) {
+
+	copy_len = count;
+	if (copy_from_user(databuf, buf, count)) {
 		MODULE_PUT;
+		kfree(databuf);
 		LEAVE();
 		return 0;
 	}
@@ -692,7 +705,7 @@ static ssize_t woal_config_write(struct file *f, const char __user *buf,
 	if (!strncmp(databuf, "fwdump_file=", strlen("fwdump_file="))) {
 		int len = copy_len - strlen("fwdump_file=");
 		gfp_t flag;
-		if (len) {
+		if (len > 0) {
 			kfree(handle->fwdump_fname);
 			flag = (in_atomic() || irqs_disabled()) ? GFP_ATOMIC :
 								  GFP_KERNEL;
@@ -806,9 +819,13 @@ static ssize_t woal_config_write(struct file *f, const char __user *buf,
 		cmd = MFG_CMD_CONFIG_TRIGGER_FRAME;
 	if (!strncmp(databuf,
 		     "otp_mac_addr_rd_wr=", strlen("otp_mac_add_rd_wr=")) &&
-	    count > strlen("otp_mac_addr_rd_wr=")) {
+	    count > strlen("otp_mac_addr_rd_wr="))
 		cmd = MFG_CMD_OTP_MAC_ADD;
-	}
+	if (!strncmp(databuf,
+		     "otp_cal_data_rd_wr=", strlen("otp_cal_data_rd_wr=")) &&
+	    count > strlen("otp_cal_data_rd_wr="))
+		cmd = MFG_CMD_OTP_CAL_DATA;
+
 	if (cmd && handle->rf_test_mode &&
 	    (woal_process_rf_test_mode_cmd(
 		     handle, cmd, (const char *)databuf, (size_t)count,
@@ -826,6 +843,7 @@ static ssize_t woal_config_write(struct file *f, const char __user *buf,
 	}
 
 	MODULE_PUT;
+	kfree(databuf);
 	LEAVE();
 	if (ret < 0)
 		return ret;
@@ -1630,7 +1648,7 @@ void woal_create_proc_entry(moal_private *priv)
 		atomic_inc(&(priv->phandle->proc_wlan->count));
 #endif /* < 3.10.0 */
 #endif /* < 2.6.26 */
-		strncpy(priv->proc_entry_name, dev->name, IFNAMSIZ);
+		strncpy(priv->proc_entry_name, dev->name, IFNAMSIZ - 1);
 		if (priv->proc_entry) {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(2, 6, 26)
 			r = proc_create_data("info", 0, priv->proc_entry,

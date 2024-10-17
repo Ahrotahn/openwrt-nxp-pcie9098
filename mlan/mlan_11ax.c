@@ -561,8 +561,10 @@ void wlan_update_11ax_cap(mlan_adapter *pmadapter,
 			    (t_u8 *)pmadapter->hw_2g_he_cap,
 			    pmadapter->hw_2g_hecap_len);
 	} else {
-		pmadapter->fw_bands |= BAND_AAX;
-		pmadapter->config_bands |= BAND_AAX;
+		if (pmadapter->fw_bands & BAND_A) {
+			pmadapter->fw_bands |= BAND_AAX;
+			pmadapter->config_bands |= BAND_AAX;
+		}
 		pmadapter->hw_hecap_len =
 			hw_he_cap->len + sizeof(MrvlIEtypesHeader_t);
 		memcpy_ext(pmadapter, pmadapter->hw_he_cap, (t_u8 *)hw_he_cap,
@@ -876,6 +878,7 @@ mlan_status wlan_11ax_ioctl_cmd(pmlan_adapter pmadapter,
 	t_u16 cmd_action = 0;
 	mlan_ds_11ax_llde_pkt_filter_cmd *llde_pkt_filter = MNULL;
 	int mlan_ds_11ax_cmd_cfg_header = 0;
+	t_u8 null_mac_addr[MLAN_MAC_ADDR_LENGTH] = {0};
 
 	ENTER();
 
@@ -907,13 +910,41 @@ mlan_status wlan_11ax_ioctl_cmd(pmlan_adapter pmadapter,
 		pmadapter->llde_packet_type = llde_pkt_filter->packet_type;
 		pmadapter->llde_device_filter = llde_pkt_filter->device_filter;
 
-		memcpy_ext(pmadapter, pmadapter->llde_macfilter1,
-			   &llde_pkt_filter->macfilter1, MLAN_MAC_ADDR_LENGTH,
-			   MLAN_MAC_ADDR_LENGTH);
+		/* reset old entries */
+		pmadapter->llde_totalMacFilters = 0;
+		// coverity[bad_memset: SUPPRESS]
+		memset(pmadapter, (t_u8 *)&pmadapter->llde_macfilters, 0,
+		       MAX_MAC_FILTER_ENTRIES * MLAN_MAC_ADDR_LENGTH);
 
-		memcpy_ext(pmadapter, pmadapter->llde_macfilter2,
-			   &llde_pkt_filter->macfilter2, MLAN_MAC_ADDR_LENGTH,
-			   MLAN_MAC_ADDR_LENGTH);
+		/* copy valid mac adresses only */
+		if (memcmp(pmadapter, &llde_pkt_filter->macfilter1,
+			   &null_mac_addr, MLAN_MAC_ADDR_LENGTH) != 0) {
+			pmadapter->llde_totalMacFilters++;
+			memcpy_ext(pmadapter,
+				   &pmadapter->llde_macfilters
+					    [0 * MLAN_MAC_ADDR_LENGTH],
+				   &llde_pkt_filter->macfilter1,
+				   MLAN_MAC_ADDR_LENGTH, MLAN_MAC_ADDR_LENGTH);
+
+			if (memcmp(pmadapter, &llde_pkt_filter->macfilter2,
+				   &null_mac_addr, MLAN_MAC_ADDR_LENGTH) != 0) {
+				pmadapter->llde_totalMacFilters++;
+				memcpy_ext(pmadapter,
+					   &pmadapter->llde_macfilters
+						    [1 * MLAN_MAC_ADDR_LENGTH],
+					   &llde_pkt_filter->macfilter2,
+					   MLAN_MAC_ADDR_LENGTH,
+					   MLAN_MAC_ADDR_LENGTH);
+			}
+		} else if (memcmp(pmadapter, &llde_pkt_filter->macfilter2,
+				  &null_mac_addr, MLAN_MAC_ADDR_LENGTH) != 0) {
+			pmadapter->llde_totalMacFilters++;
+			memcpy_ext(pmadapter,
+				   &pmadapter->llde_macfilters
+					    [0 * MLAN_MAC_ADDR_LENGTH],
+				   &llde_pkt_filter->macfilter2,
+				   MLAN_MAC_ADDR_LENGTH, MLAN_MAC_ADDR_LENGTH);
+		}
 
 		/* remove llde packet filter parameters from buffer which will
 		 * be passed to fimrware */
@@ -1186,6 +1217,9 @@ mlan_status wlan_cmd_twt_cfg(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 			ds_twtcfg->param.twt_setup.twt_mantissa);
 		twt_setup_params->twt_request =
 			ds_twtcfg->param.twt_setup.twt_request;
+		twt_setup_params->bcnMiss_threshold = wlan_cpu_to_le16(
+			ds_twtcfg->param.twt_setup.bcnMiss_threshold);
+
 		cmd->size += sizeof(hostcmd_twtcfg->param.twt_setup);
 		break;
 	case MLAN_11AX_TWT_TEARDOWN_SUBID:
