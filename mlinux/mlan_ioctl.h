@@ -4068,6 +4068,7 @@ typedef struct _mlan_ds_11ax_cfg {
 #define MLAN_11AXCMD_CFG_ID_SET_BSRP 8
 #define MLAN_11AXCMD_CFG_ID_LLDE 9
 #define MLAN_11AXCMD_CFG_ID_RUTXPWR 10
+#define MLAN_11AXCMD_CFG_ID_HESUER 11
 
 #define MLAN_11AXCMD_SR_SUBID 0x102
 #define MLAN_11AXCMD_BEAM_SUBID 0x103
@@ -4078,6 +4079,7 @@ typedef struct _mlan_ds_11ax_cfg {
 #define MLAN_11AXCMD_SET_BSRP_SUBID 0x109
 #define MLAN_11AXCMD_LLDE_SUBID 0x110
 #define MLAN_11AXCMD_RUTXSUBPWR_SUBID 0x118
+#define MLAN_11AXCMD_HESUER_SUBID 0x121
 
 #define MLAN_11AX_TWT_SETUP_SUBID 0x114
 #define MLAN_11AX_TWT_TEARDOWN_SUBID 0x115
@@ -4201,6 +4203,12 @@ typedef struct _mlan_ds_11ax_rutxpwr_cmd {
 	t_s8 rutxSubPwr[89];
 } mlan_ds_11ax_rutxpwr_cmd, *pmlan_ds_11ax_rutxpwr_cmd;
 
+/** Type definition of mlan_ds_11ax_HeSuER_cmd for MLAN_11AXCMD_HESUER_SUBID */
+typedef struct _mlan_ds_11ax_HeSuER_cmd {
+	/** command value: 1 is enable, 0 is disable*/
+	t_u8 value;
+} mlan_ds_11ax_HeSuER_cmd, *pmlan_ds_11ax_HeSuER_cmd;
+
 /** Type definition of mlan_ds_11ax_cmd_cfg for MLAN_OID_11AX_CMD_CFG */
 typedef struct _mlan_ds_11ax_cmd_cfg {
 	/** Sub-command */
@@ -4228,6 +4236,8 @@ typedef struct _mlan_ds_11ax_cmd_cfg {
 		mlan_ds_11ax_llde_cmd llde_cfg;
 		/* MLAN_11AXCMD_RUTXPWR_SUBID */
 		mlan_ds_11ax_rutxpwr_cmd rutxpwr_cfg;
+		/** HeSuER configuration for MLAN_11AXCMD_HESUER_SUBID */
+		mlan_ds_11ax_HeSuER_cmd HeSuER_cfg;
 	} param;
 } mlan_ds_11ax_cmd_cfg, *pmlan_ds_11ax_cmd_cfg;
 

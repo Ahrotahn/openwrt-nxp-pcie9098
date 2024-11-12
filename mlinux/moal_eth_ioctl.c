@@ -660,6 +660,10 @@ static int woal_setget_priv_11axcmdcfg(moal_private *priv, t_u8 *respbuf,
 	case MLAN_11AXCMD_CFG_ID_RUTXPWR:
 		cfg->sub_id = MLAN_11AXCMD_RUTXSUBPWR_SUBID;
 		break;
+	case MLAN_11AXCMD_CFG_ID_HESUER:
+		cfg->sub_id = MLAN_11AXCMD_HESUER_SUBID;
+		cfg->param.HeSuER_cfg.value = data[1];
+		break;
 
 	default:
 		PRINTM(MERROR, "unknown 11axcmd\n");

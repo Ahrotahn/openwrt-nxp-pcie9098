@@ -1661,7 +1661,18 @@ mlan_status woal_reset_wifi(moal_handle *handle, t_u8 cnt, char *reason)
 	static wifi_timeval reset_time;
 	wifi_timeval ts;
 	t_u64 diff;
+	t_u8 intf_num;
 
+	/* Disconnect all interfaces */
+	for (intf_num = 0; intf_num < handle->priv_num; intf_num++) {
+		if (handle->priv[intf_num] &&
+		    handle->priv[intf_num]->media_connected == MTRUE) {
+			if (woal_disconnect(handle->priv[intf_num],
+					    MOAL_IOCTL_WAIT, NULL,
+					    DEF_DEAUTH_REASON_CODE))
+				PRINTM(MERROR, "woal_disconnect failed\n");
+		}
+	}
 #define MAX_WIFI_RESET_INTERVAL 15 * 60 * 1000000 // 15 minute
 	woal_get_monotonic_time(&ts);
 	diff = (t_u64)(timeval_to_usec(ts) - timeval_to_usec(reset_time));
@@ -5010,23 +5021,18 @@ static int woal_cfg80211_scan(struct wiphy *wiphy, struct net_device *dev,
 			if (chan->flags & IEEE80211_CHAN_PASSIVE_SCAN)
 				scan_req->chan_list[num_chans].scan_time =
 					INIT_PASSIVE_SCAN_CHAN_TIME;
-			else if ((priv->bss_type == MLAN_BSS_TYPE_STA) &&
-				 (1 ==
-				  priv->phandle->scan_request->n_channels)) {
+			else if (priv->bss_type == MLAN_BSS_TYPE_STA) {
 				/*
 				 * Set passive scan time to 110ms to discover
 				 * all nearby AP's, Current 40ms passive scan
-				 * time does not scan all AP's. There are issues
-				 * with 40ms scan time:
-				 * 1. Regular user passive scan does list
-				 * limited nearby AP's.
-				 * 2. Radio Measurement RPT with beacon report
-				 * for passive scan mode does not list all
-				 * required AP's and hence cert fails. This
-				 * change is limited to below scenario only:
-				 * 1. Single channel user scan is requested
-				 * 2. STA is in connected state
-				 * 3. Scan type is passive
+				 * time does not scan all AP's. As beacon
+				 * interval is 100ms and dwell time on channel
+				 * is 40ms There are issues with 40ms scan time:
+				 * 1. Passive scan does list limited nearby
+				 * AP's. This change is limited to below
+				 * scenario only:
+				 * 1. STA is in connected state
+				 * 2. Scan type is passive
 				 */
 				if (scan_req->chan_list[num_chans].scan_type ==
 				    MLAN_SCAN_TYPE_PASSIVE)

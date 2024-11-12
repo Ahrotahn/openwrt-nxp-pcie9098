@@ -12333,6 +12333,10 @@ t_void woal_evt_work_queue(struct work_struct *work)
 			woal_host_mlme_process_assoc_timeout(
 				(moal_private *)evt->priv, evt->assoc_bss);
 			break;
+		case WOAL_EVENT_RESET_WIFI:
+			woal_reset_wifi(handle, evt->deauth_evt_cnt,
+					"EAPOL timeout");
+			break;
 #endif
 #endif
 #ifdef UAP_SUPPORT

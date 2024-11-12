@@ -174,10 +174,7 @@ Change log:
 #define IMX_ANDROID_14 0
 #define IMX_ANDROID_12_BACKPORT 0
 
-#if defined(IMX_SUPPORT)
-
-#if defined(IMX_ANDROID)
-
+#ifdef ANDROID_SDK_VERSION
 #if CFG80211_VERSION_CODE >= KERNEL_VERSION(5, 15, 52)
 #undef IMX_ANDROID_13
 #define IMX_ANDROID_13 1
@@ -190,7 +187,7 @@ Change log:
 #undef IMX_ANDROID_12_BACKPORT
 #define IMX_ANDROID_12_BACKPORT 1
 #endif
-#endif
+#else
 #endif
 
 /**
@@ -1043,7 +1040,7 @@ typedef struct _wait_queue {
 	/** flag for wait_timeout */
 	t_u8 wait_timeout;
 	/** retry count */
-	t_u8 retry;
+	t_u16 retry;
 } wait_queue, *pwait_queue;
 
 /** Auto Rate */
@@ -1258,6 +1255,7 @@ enum woal_event_type {
 #endif
 #endif
 	WOAL_EVENT_RGPWR_KEY_MISMATCH,
+	WOAL_EVENT_RESET_WIFI,
 };
 
 /** chan_rpt_info */
@@ -1290,6 +1288,7 @@ struct woal_event {
 		mlan_ds_assoc_info assoc_info;
 		mlan_deauth_param deauth_info;
 		chan_radar_info radar_info;
+		t_u8 deauth_evt_cnt;
 	};
 };
 

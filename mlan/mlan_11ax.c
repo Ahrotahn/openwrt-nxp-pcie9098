@@ -998,6 +998,8 @@ mlan_status wlan_cmd_11ax_cmd(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 		(mlan_ds_11ax_llde_cmd *)&ds_11ax_cmd->param;
 	mlan_ds_11ax_rutxpwr_cmd *rutxpwr_cmd =
 		(mlan_ds_11ax_rutxpwr_cmd *)&ds_11ax_cmd->param;
+	mlan_ds_11ax_HeSuER_cmd *HeSuER_cmd =
+		(mlan_ds_11ax_HeSuER_cmd *)&ds_11ax_cmd->param;
 	MrvlIEtypes_Data_t *tlv = MNULL;
 
 	ENTER();
@@ -1053,6 +1055,10 @@ mlan_status wlan_cmd_11ax_cmd(pmlan_private pmpriv, HostCmd_DS_COMMAND *cmd,
 	case MLAN_11AXCMD_RUTXSUBPWR_SUBID:
 		memcpy_ext(pmadapter, axcmd->val, &rutxpwr_cmd->subBand,
 			   sizeof(t_u8), sizeof(t_u8));
+		cmd->size += sizeof(t_u8);
+		break;
+	case MLAN_11AXCMD_HESUER_SUBID:
+		axcmd->val[0] = HeSuER_cmd->value;
 		cmd->size += sizeof(t_u8);
 		break;
 
@@ -1147,6 +1153,10 @@ mlan_status wlan_ret_11ax_cmd(pmlan_private pmpriv, HostCmd_DS_COMMAND *resp,
 			   sizeof(mlan_ds_11ax_rutxpwr_cmd),
 			   sizeof(mlan_ds_11ax_rutxpwr_cmd));
 		break;
+	case MLAN_11AXCMD_HESUER_SUBID:
+		cfg->param.HeSuER_cfg.value = *axcmd->val;
+		break;
+
 	default:
 		PRINTM(MERROR, "Unknown subcmd %x\n", axcmd->sub_id);
 		break;

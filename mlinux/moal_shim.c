@@ -2699,6 +2699,35 @@ static void woal_rgpower_key_mismatch_event(moal_private *priv)
 	}
 }
 
+#if CFG80211_VERSION_CODE >= KERNEL_VERSION(3, 8, 0)
+/**
+ *  @brief This function prepare wifi reset event
+ *
+ *  @param priv pointer to the moal_private structure.
+ *
+ *  @return         N/A
+ */
+static void woal_wifi_reset_event(moal_private *priv, t_u8 deauth_evt_cnt)
+{
+	struct woal_event *evt;
+	unsigned long flags;
+	moal_handle *handle = priv->phandle;
+
+	evt = kzalloc(sizeof(struct woal_event), GFP_ATOMIC);
+	if (evt) {
+		evt->priv = priv;
+		evt->type = WOAL_EVENT_RESET_WIFI;
+		evt->deauth_evt_cnt = deauth_evt_cnt;
+		INIT_LIST_HEAD(&evt->link);
+		spin_lock_irqsave(&handle->evt_lock, flags);
+		list_add_tail(&evt->link, &handle->evt_queue);
+		spin_unlock_irqrestore(&handle->evt_lock, flags);
+		queue_work(handle->evt_workqueue, &handle->evt_work);
+	}
+	// coverity[leaked_storage]: SUPPRESS
+}
+#endif
+
 /**
  *  @brief This function handles defer event receive
  *
@@ -4478,14 +4507,11 @@ mlan_status moal_recv_event(t_void *pmoal, pmlan_event pmevent)
 #define MAX_DEAUTH_COUNTER 5
 							if (priv->deauth_evt_cnt >=
 							    MAX_DEAUTH_COUNTER) {
-								if (woal_reset_wifi(
-									    priv->phandle,
-									    priv->deauth_evt_cnt,
-									    "EAPOL timeout") ==
-								    MLAN_STATUS_SUCCESS) {
-									priv->deauth_evt_cnt =
-										0;
-								}
+								woal_wifi_reset_event(
+									priv,
+									priv->deauth_evt_cnt);
+								priv->deauth_evt_cnt =
+									0;
 							}
 						}
 						priv->cfg_disconnect = MTRUE;
